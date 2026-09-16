@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { GOOGLE_CALENDAR_SCOPE, getRedirectUri } from '../_googleAuth'
+import { GOOGLE_AUTH_SCOPES, getRedirectUri } from '../_googleAuth'
 
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 
@@ -26,7 +26,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: GOOGLE_CALENDAR_SCOPE,
+    scope: GOOGLE_AUTH_SCOPES,
     access_type: 'offline',
     prompt: 'consent',
     state: userId,

@@ -15,6 +15,14 @@ const USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v2/userinfo'
 // 구글의 "민감 범위" 심사(캘린더 전체 접근보다 완화된 경로)를 피한다.
 export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 
+// userinfo API를 부르려면 calendar.events만으론 부족해서 email/profile을 더한다.
+// 이 두 스코프는 민감/제한 스코프가 아니라 테스트 사용자 제한과 무관하다.
+export const GOOGLE_AUTH_SCOPES = [
+  GOOGLE_CALENDAR_SCOPE,
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+].join(' ')
+
 export interface StoredGoogleAccount {
   userId: string
   googleUserId: string
