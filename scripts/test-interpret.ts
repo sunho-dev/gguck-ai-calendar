@@ -8,10 +8,10 @@ const SAMPLE_KNOWN_ALIASES: KnownPlaceAlias[] = [
 ]
 
 async function main() {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    console.error('ANTHROPIC_API_KEY 환경 변수가 설정되어 있지 않습니다.')
-    console.error('PowerShell: $env:ANTHROPIC_API_KEY = "sk-ant-..."')
+    console.error('GEMINI_API_KEY 환경 변수가 설정되어 있지 않습니다.')
+    console.error('PowerShell: $env:GEMINI_API_KEY = "AIza..."')
     process.exit(1)
   }
 

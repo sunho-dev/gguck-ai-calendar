@@ -24,9 +24,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    res.status(500).json({ error: 'ANTHROPIC_API_KEY가 설정되지 않았습니다.' } satisfies InterpretErrorBody)
+    res.status(500).json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다.' } satisfies InterpretErrorBody)
     return
   }
 
@@ -52,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(422).json({ error: err.message } satisfies InterpretErrorBody)
       return
     }
-    console.error('[api/interpret] Claude API error:', err)
+    console.error('[api/interpret] Gemini API error:', err)
     res.status(502).json({ error: 'AI 해석 중 오류가 발생했습니다.' } satisfies InterpretErrorBody)
   }
 }

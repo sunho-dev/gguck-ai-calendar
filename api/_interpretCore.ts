@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { FinishReason, GoogleGenAI } from '@google/genai'
 
 export interface InterpretedEvent {
   title: string
@@ -105,33 +105,40 @@ function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): str
   return lines.join('\n')
 }
 
+const MODEL = 'gemini-2.5-flash' // 무료 티어 대상 Flash 모델. 더 최신 Flash 모델이 나오면 이 값만 바꾸면 됨.
+
 export async function interpretEventText(
   text: string,
   nowIso: string,
   apiKey: string,
   knownAliases: KnownPlaceAlias[] = [],
 ): Promise<InterpretedEvent> {
-  const client = new Anthropic({ apiKey })
+  const client = new GoogleGenAI({ apiKey })
 
-  const response = await client.messages.create({
-    model: 'claude-opus-5',
-    max_tokens: 1024,
-    system: buildSystemPrompt(nowIso, knownAliases),
-    output_config: {
-      effort: 'medium',
-      format: { type: 'json_schema', schema: EVENT_SCHEMA },
+  const response = await client.models.generateContent({
+    model: MODEL,
+    contents: text,
+    config: {
+      systemInstruction: buildSystemPrompt(nowIso, knownAliases),
+      responseMimeType: 'application/json',
+      responseJsonSchema: EVENT_SCHEMA,
     },
-    messages: [{ role: 'user', content: text }],
   })
 
-  if (response.stop_reason === 'refusal') {
+  const blockReason = response.promptFeedback?.blockReason
+  if (blockReason && blockReason !== 'BLOCKED_REASON_UNSPECIFIED') {
     throw new InterpretRefusedError('이 텍스트에서는 일정 정보를 추출할 수 없습니다.')
   }
 
-  const textBlock = response.content.find((block) => block.type === 'text')
-  if (!textBlock || textBlock.type !== 'text') {
+  const finishReason = response.candidates?.[0]?.finishReason
+  if (finishReason === FinishReason.SAFETY || finishReason === FinishReason.RECITATION) {
+    throw new InterpretRefusedError('이 텍스트에서는 일정 정보를 추출할 수 없습니다.')
+  }
+
+  const responseText = response.text
+  if (!responseText) {
     throw new Error('AI 응답에서 결과를 찾을 수 없습니다.')
   }
 
-  return JSON.parse(textBlock.text) as InterpretedEvent
+  return JSON.parse(responseText) as InterpretedEvent
 }
