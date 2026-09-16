@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
 import koreanHolidays from '../data/koreanHolidays.json';
 import type { Event } from '../types/schema';
@@ -136,12 +137,8 @@ export function CalendarScreen() {
           {weekDays.map((date) => {
             const selected = date === selectedDate;
             const holiday = Boolean(HOLIDAYS[date]);
-            return (
-              <Pressable
-                key={date}
-                onPress={() => setSelectedDate(date)}
-                style={[styles.dayButton, selected && styles.dayButtonSelected]}
-              >
+            const dayContent = (
+              <>
                 <Text
                   style={[
                     styles.dayWeekday,
@@ -160,6 +157,22 @@ export function CalendarScreen() {
                 >
                   {dayOfMonth(date)}
                 </Text>
+              </>
+            );
+            return (
+              <Pressable key={date} onPress={() => setSelectedDate(date)}>
+                {selected ? (
+                  <GlossyBox
+                    colors={['#d49478', '#b56d52']}
+                    shadowColor="#b17644"
+                    borderRadius={14}
+                    contentStyle={styles.dayButton}
+                  >
+                    {dayContent}
+                  </GlossyBox>
+                ) : (
+                  <View style={styles.dayButton}>{dayContent}</View>
+                )}
               </Pressable>
             );
           })}
@@ -188,20 +201,32 @@ export function CalendarScreen() {
               const selected = date === selectedDate;
               const holiday = Boolean(HOLIDAYS[date]);
               const inMonth = isSameMonth(date, viewedMonth);
+              const cellText = (
+                <Text
+                  style={[
+                    styles.monthCellText,
+                    !inMonth && styles.monthCellTextOutside,
+                    holiday && inMonth && !selected && styles.holidayText,
+                    selected && styles.dayTextSelected,
+                  ]}
+                >
+                  {dayOfMonth(date)}
+                </Text>
+              );
               return (
                 <Pressable key={date} onPress={() => setSelectedDate(date)} style={styles.monthCell}>
-                  <View style={[styles.monthCellCircle, selected && styles.monthCellCircleSelected]}>
-                    <Text
-                      style={[
-                        styles.monthCellText,
-                        !inMonth && styles.monthCellTextOutside,
-                        holiday && inMonth && !selected && styles.holidayText,
-                        selected && styles.dayTextSelected,
-                      ]}
+                  {selected ? (
+                    <GlossyBox
+                      colors={['#d49478', '#b56d52']}
+                      shadowColor="#b17644"
+                      borderRadius={14}
+                      style={styles.monthCellCircle}
                     >
-                      {dayOfMonth(date)}
-                    </Text>
-                  </View>
+                      {cellText}
+                    </GlossyBox>
+                  ) : (
+                    <View style={styles.monthCellCircle}>{cellText}</View>
+                  )}
                   {hasEventsOn(date) ? <View style={styles.monthCellDot} /> : null}
                 </Pressable>
               );
@@ -290,9 +315,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     minWidth: 40,
   },
-  dayButtonSelected: {
-    backgroundColor: colors.terracotta,
-  },
   dayWeekday: {
     fontSize: 12,
     color: colors.warmGray,
@@ -354,9 +376,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  monthCellCircleSelected: {
-    backgroundColor: colors.terracotta,
   },
   monthCellText: {
     fontSize: 13,

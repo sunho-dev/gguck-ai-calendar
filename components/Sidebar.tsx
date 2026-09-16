@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../constants/colors';
+import { AppLogo } from './AppLogo';
+import { GlossyBox } from './GlossyBox';
 
 export type NavKey = 'calendar' | 'assistant' | 'rules' | 'alerts';
 
@@ -23,24 +25,44 @@ export function Sidebar({
   return (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
       <View style={[styles.brand, compact && styles.brandCompact]}>
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>꾹</Text>
-        </View>
-        {!compact && <Text style={styles.brandText}>kkuk</Text>}
+        <AppLogo size={34} />
+        {!compact && (
+          <View>
+            <Text style={styles.brandText}>kkuk</Text>
+            <Text style={styles.brandSubtitle}>가볍게 말하고, 꾹.</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.nav}>
         {NAV_ITEMS.map((item) => {
           const selected = item.key === active;
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => onSelect(item.key)}
-              style={[styles.navItem, compact && styles.navItemCompact, selected && styles.navItemActive]}
-            >
+          const content = (
+            <>
               <Text style={[styles.navIcon, selected && styles.navTextActive]}>{item.icon}</Text>
               {!compact && (
                 <Text style={[styles.navLabel, selected && styles.navTextActive]}>{item.label}</Text>
+              )}
+            </>
+          );
+          return (
+            <Pressable key={item.key} onPress={() => onSelect(item.key)}>
+              {selected ? (
+                <GlossyBox
+                  colors={['#cf8f71', '#b56d52']}
+                  shadowColor="#ac7041"
+                  borderRadius={12}
+                  contentStyle={[
+                    styles.navItemContent,
+                    compact && styles.navItemContentCompact,
+                  ]}
+                >
+                  {content}
+                </GlossyBox>
+              ) : (
+                <View style={[styles.navItemContent, compact && styles.navItemContentCompact]}>
+                  {content}
+                </View>
               )}
             </Pressable>
           );
@@ -72,41 +94,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 0,
   },
-  logo: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: colors.terracotta,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    color: colors.white,
-    fontWeight: '800',
-    fontSize: 16,
-  },
   brandText: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.textDark,
   },
+  brandSubtitle: {
+    fontSize: 11,
+    color: colors.warmGray,
+    marginTop: 1,
+  },
   nav: {
     gap: 4,
   },
-  navItem: {
+  navItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 10,
-    borderRadius: 10,
   },
-  navItemCompact: {
+  navItemContentCompact: {
     justifyContent: 'center',
     paddingHorizontal: 0,
-  },
-  navItemActive: {
-    backgroundColor: colors.terracotta,
   },
   navIcon: {
     fontSize: 16,
