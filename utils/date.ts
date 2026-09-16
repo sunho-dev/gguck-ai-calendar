@@ -1,4 +1,4 @@
-import type { ISODate } from '../types/schema'
+import type { ISODate, ISOTime } from '../types/schema'
 
 const TIME_ZONE = 'Asia/Seoul'
 
@@ -62,4 +62,15 @@ export function buildMonthGrid(monthDate: ISODate): ISODate[] {
   const first = startOfMonth(monthDate)
   const gridStart = addDays(first, -weekdayIndex(first))
   return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+}
+
+// 자정을 넘기는 소요 시간이면 날짜도 넘어간 만큼 같이 밀어준다.
+// 클라이언트(구글 캘린더 링크)와 서버(api/calendar/sync-event) 양쪽에서 같이 쓴다.
+export function addMinutesToTime(date: ISODate, time: ISOTime, minutes: number): { date: ISODate; time: ISOTime } {
+  const [hour, minute] = time.split(':').map(Number)
+  const total = hour * 60 + minute + minutes
+  const dayOffset = Math.floor(total / 1440)
+  const wrapped = ((total % 1440) + 1440) % 1440
+  const newTime = `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`
+  return { date: dayOffset ? addDays(date, dayOffset) : date, time: newTime }
 }

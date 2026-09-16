@@ -16,6 +16,7 @@ export interface Event {
   bufferMin: number
   createdFrom: 'share' | 'paste' | 'text' | 'voice'
   sharedWith: string[]
+  googleEventId?: string // 구글 캘린더 자동 동기화로 만들어진 이벤트일 때만 존재
 }
 
 /**

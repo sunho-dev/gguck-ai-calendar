@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
@@ -17,6 +17,51 @@ import {
   todayISODate,
 } from '../utils/date';
 import { generateEventId, parseQuickEntry } from '../utils/quickEntry';
+import { interpretEvent } from '../utils/interpretEvent';
+import { buildGoogleCalendarUrl } from '../utils/googleCalendar';
+import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/googleSync';
+import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
+
+interface ResolvedEntry {
+  title: string;
+  category: string;
+  time: string;
+  durationMin: number;
+  place: Event['place'];
+  remindMin: number;
+  bufferMin: number;
+}
+
+// 길선호 팀원의 /api/interpret(Claude 기반 AI 해석)를 우선 쓰고, 배포되지 않은 환경(로컬 네이티브 등)에서
+// 호출이 실패하면 자체 정규식 파서로 대체한다. 날짜는 항상 캘린더에서 선택한 날짜를 그대로 쓴다
+// (텍스트 속 상대 날짜 표현으로 바뀌면 "날짜 선택 후 입력" 흐름과 어긋나서 의도적으로 덮어쓴다).
+async function resolveQuickEntry(text: string): Promise<ResolvedEntry | null> {
+  try {
+    const interpreted = await interpretEvent({ text, createdFrom: 'text' });
+    return {
+      title: interpreted.title,
+      category: interpreted.category,
+      time: interpreted.time ?? '09:00',
+      durationMin: interpreted.durationMin ?? 60,
+      place: interpreted.place ? { ...interpreted.place, lat: 0, lng: 0 } : null,
+      remindMin: interpreted.remindMin ?? 0,
+      bufferMin: interpreted.bufferMin ?? 0,
+    };
+  } catch (err) {
+    console.warn('[quick-add] AI 해석 실패, 기본 파서로 대체합니다:', err);
+    const parsed = parseQuickEntry(text);
+    if (!parsed) return null;
+    return {
+      title: parsed.title,
+      category: 'personal',
+      time: parsed.time,
+      durationMin: 60,
+      place: null,
+      remindMin: 0,
+      bufferMin: 0,
+    };
+  }
+}
 
 const HOLIDAYS: Record<string, string> = koreanHolidays;
 const WEEKDAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -89,6 +134,7 @@ type ViewMode = 'week' | 'month';
 
 export function CalendarScreen() {
   const today = useMemo(() => todayISODate(), []);
+  const googleStatus = useGoogleSyncStatus();
   const [events, setEvents] = useState<Event[]>(() => buildSampleEvents(today));
   const [selectedDate, setSelectedDate] = useState(today);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
@@ -96,6 +142,7 @@ export function CalendarScreen() {
   const [inputText, setInputText] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i)), [today]);
   const monthGrid = useMemo(() => buildMonthGrid(viewedMonth), [viewedMonth]);
@@ -120,40 +167,56 @@ export function CalendarScreen() {
     setErrorMessage(null);
   };
 
-  const handleSubmit = () => {
-    const parsed = parseQuickEntry(inputText);
-    if (!parsed) {
+  const handleSubmit = async () => {
+    const text = inputText.trim();
+    if (!text || isSubmitting) return;
+
+    setIsSubmitting(true);
+    const resolved = await resolveQuickEntry(text);
+    setIsSubmitting(false);
+
+    if (!resolved) {
       setErrorMessage('몇 시인지 알려주세요. 예: 15시 회의');
       return;
     }
 
     if (editingId) {
-      setEvents((prev) =>
-        prev.map((event) =>
-          event.id === editingId
-            ? { ...event, title: parsed.title, time: parsed.time, startDate: selectedDate, endDate: selectedDate }
-            : event
-        )
-      );
+      const existing = events.find((event) => event.id === editingId);
+      if (!existing) {
+        resetEntry();
+        return;
+      }
+      const updated: Event = { ...existing, ...resolved, startDate: selectedDate, endDate: selectedDate };
+      setEvents((prev) => prev.map((event) => (event.id === editingId ? updated : event)));
+      if (googleStatus.connected) {
+        syncEventUpdate(updated).then((googleEventId) => {
+          if (googleEventId) applyGoogleEventId(updated.id, googleEventId);
+        });
+      }
     } else {
       const newEvent: Event = {
         id: generateEventId(),
         userId: 'local',
-        title: parsed.title,
-        category: 'personal',
         startDate: selectedDate,
         endDate: selectedDate,
-        time: parsed.time,
-        durationMin: 60,
-        place: null,
-        remindMin: 0,
-        bufferMin: 0,
         createdFrom: 'text',
         sharedWith: [],
+        ...resolved,
       };
       setEvents((prev) => [...prev, newEvent]);
+      if (googleStatus.connected) {
+        syncEventCreate(newEvent).then((googleEventId) => {
+          if (googleEventId) applyGoogleEventId(newEvent.id, googleEventId);
+        });
+      }
     }
     resetEntry();
+  };
+
+  // 로컬 상태에 방금 만든/수정한 일정이 구글 캘린더에도 반영된 뒤, 반환된 이벤트 id를 매달아둔다
+  // (다음 수정/삭제 때 어떤 구글 이벤트를 건드려야 할지 알아야 하므로).
+  const applyGoogleEventId = (id: string, googleEventId: string) => {
+    setEvents((prev) => prev.map((event) => (event.id === id ? { ...event, googleEventId } : event)));
   };
 
   const handleEdit = (event: Event) => {
@@ -165,11 +228,18 @@ export function CalendarScreen() {
     setErrorMessage(null);
   };
 
-  const handleDelete = (id: string) => {
-    setEvents((prev) => prev.filter((event) => event.id !== id));
-    if (editingId === id) {
+  const handleDelete = (event: Event) => {
+    setEvents((prev) => prev.filter((e) => e.id !== event.id));
+    if (editingId === event.id) {
       resetEntry();
     }
+    if (googleStatus.connected) {
+      syncEventDelete(event);
+    }
+  };
+
+  const handleAddToGoogle = (event: Event) => {
+    Linking.openURL(buildGoogleCalendarUrl(event));
   };
 
   return (
@@ -310,11 +380,19 @@ export function CalendarScreen() {
           placeholderTextColor={colors.warmGray}
           style={styles.quickAddInput}
           returnKeyType="done"
+          editable={!isSubmitting}
         />
-        <Pressable testID="quick-add-submit" onPress={handleSubmit} style={styles.quickAddButton}>
-          <Text style={styles.quickAddButtonText}>{editingId ? '수정' : '등록'}</Text>
+        <Pressable
+          testID="quick-add-submit"
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+          style={[styles.quickAddButton, isSubmitting && styles.quickAddButtonDisabled]}
+        >
+          <Text style={styles.quickAddButtonText}>
+            {isSubmitting ? '해석 중…' : editingId ? '수정' : '등록'}
+          </Text>
         </Pressable>
-        {editingId ? (
+        {editingId && !isSubmitting ? (
           <Pressable onPress={resetEntry} style={styles.quickAddCancel}>
             <Text style={styles.quickAddCancelText}>취소</Text>
           </Pressable>
@@ -347,14 +425,29 @@ export function CalendarScreen() {
             <View style={styles.eventCardActions}>
               <Pressable
                 testID={`delete-${item.id}`}
-                onPress={() => handleDelete(item.id)}
+                onPress={() => handleDelete(item)}
                 style={styles.deleteButton}
               >
                 <Text style={styles.deleteButtonText}>×</Text>
               </Pressable>
-              <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
-                <Text style={styles.editButtonText}>수정</Text>
-              </Pressable>
+              <View style={styles.secondaryButtonRow}>
+                {googleStatus.connected ? (
+                  <Text style={styles.syncedBadge}>
+                    {item.googleEventId ? '✓ 구글 동기화됨' : '동기화 중…'}
+                  </Text>
+                ) : (
+                  <Pressable
+                    testID={`google-${item.id}`}
+                    onPress={() => handleAddToGoogle(item)}
+                    style={styles.googleButton}
+                  >
+                    <Text style={styles.googleButtonText}>구글</Text>
+                  </Pressable>
+                )}
+                <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
+                  <Text style={styles.editButtonText}>수정</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         )}
@@ -514,6 +607,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
   },
+  quickAddButtonDisabled: {
+    opacity: 0.6,
+  },
   quickAddButtonText: {
     color: colors.white,
     fontSize: 14,
@@ -575,6 +671,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 16,
   },
+  secondaryButtonRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
   editButton: {
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -585,6 +685,22 @@ const styles = StyleSheet.create({
     color: colors.textDark,
     fontSize: 12,
     fontWeight: '600',
+  },
+  googleButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: colors.lightBeige,
+  },
+  googleButtonText: {
+    color: colors.textDark,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  syncedBadge: {
+    fontSize: 11,
+    color: colors.warmGray,
+    alignSelf: 'center',
   },
   eventCategory: {
     fontSize: 11,
