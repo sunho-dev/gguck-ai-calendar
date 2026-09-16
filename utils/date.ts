@@ -34,3 +34,32 @@ export function formatMonthLabel(date: ISODate): string {
 export function dayOfMonth(date: ISODate): number {
   return Number(date.slice(-2))
 }
+
+export function isSameMonth(a: ISODate, b: ISODate): boolean {
+  return a.slice(0, 7) === b.slice(0, 7)
+}
+
+export function startOfMonth(date: ISODate): ISODate {
+  return `${date.slice(0, 7)}-01`
+}
+
+export function addMonths(date: ISODate, amount: number): ISODate {
+  const [year, month, day] = date.split('-').map(Number)
+  const total = year * 12 + (month - 1) + amount
+  const newYear = Math.floor(total / 12)
+  const newMonth = (total % 12) + 1
+  const lastDay = new Date(Date.UTC(newYear, newMonth, 0)).getUTCDate()
+  return `${newYear}-${String(newMonth).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`
+}
+
+// 0=일요일 ... 6=토요일, 한국 시간 기준
+function weekdayIndex(date: ISODate): number {
+  return new Date(`${date}T12:00:00+09:00`).getUTCDay()
+}
+
+// 해당 월이 포함된 6주(42칸)짜리 달력 그리드를 반환한다. 앞뒤 달의 날짜도 채워서 넣는다.
+export function buildMonthGrid(monthDate: ISODate): ISODate[] {
+  const first = startOfMonth(monthDate)
+  const gridStart = addDays(first, -weekdayIndex(first))
+  return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+}
