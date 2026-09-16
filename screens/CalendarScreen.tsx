@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
@@ -16,6 +16,7 @@ import {
   startOfMonth,
   todayISODate,
 } from '../utils/date';
+import { generateEventId, parseQuickEntry } from '../utils/quickEntry';
 
 const HOLIDAYS: Record<string, string> = koreanHolidays;
 const WEEKDAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -88,19 +89,22 @@ type ViewMode = 'week' | 'month';
 
 export function CalendarScreen() {
   const today = useMemo(() => todayISODate(), []);
-  const sampleEvents = useMemo(() => buildSampleEvents(today), [today]);
+  const [events, setEvents] = useState<Event[]>(() => buildSampleEvents(today));
   const [selectedDate, setSelectedDate] = useState(today);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [viewedMonth, setViewedMonth] = useState(() => startOfMonth(today));
+  const [inputText, setInputText] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i)), [today]);
   const monthGrid = useMemo(() => buildMonthGrid(viewedMonth), [viewedMonth]);
 
   const hasEventsOn = (date: string) =>
-    sampleEvents.some((event) => event.startDate <= date && event.endDate >= date);
+    events.some((event) => event.startDate <= date && event.endDate >= date);
 
   const holidayName = HOLIDAYS[selectedDate];
-  const eventsForDay = sampleEvents
+  const eventsForDay = events
     .filter((event) => event.startDate <= selectedDate && event.endDate >= selectedDate)
     .sort((a, b) => a.time.localeCompare(b.time));
 
@@ -108,6 +112,64 @@ export function CalendarScreen() {
   const switchToMonth = () => {
     setViewMode('month');
     setViewedMonth(startOfMonth(selectedDate));
+  };
+
+  const resetEntry = () => {
+    setInputText('');
+    setEditingId(null);
+    setErrorMessage(null);
+  };
+
+  const handleSubmit = () => {
+    const parsed = parseQuickEntry(inputText);
+    if (!parsed) {
+      setErrorMessage('몇 시인지 알려주세요. 예: 15시 회의');
+      return;
+    }
+
+    if (editingId) {
+      setEvents((prev) =>
+        prev.map((event) =>
+          event.id === editingId
+            ? { ...event, title: parsed.title, time: parsed.time, startDate: selectedDate, endDate: selectedDate }
+            : event
+        )
+      );
+    } else {
+      const newEvent: Event = {
+        id: generateEventId(),
+        userId: 'local',
+        title: parsed.title,
+        category: 'personal',
+        startDate: selectedDate,
+        endDate: selectedDate,
+        time: parsed.time,
+        durationMin: 60,
+        place: null,
+        remindMin: 0,
+        bufferMin: 0,
+        createdFrom: 'text',
+        sharedWith: [],
+      };
+      setEvents((prev) => [...prev, newEvent]);
+    }
+    resetEntry();
+  };
+
+  const handleEdit = (event: Event) => {
+    const [hour, minute] = event.time.split(':');
+    const minuteLabel = minute !== '00' ? ` ${Number(minute)}분` : '';
+    setInputText(`${Number(hour)}시${minuteLabel} ${event.title}`);
+    setSelectedDate(event.startDate);
+    setEditingId(event.id);
+    setErrorMessage(null);
+  };
+
+  const handleDelete = (id: string) => {
+    setEvents((prev) => prev.filter((event) => event.id !== id));
+    if (editingId === id) {
+      resetEntry();
+    }
   };
 
   return (
@@ -235,6 +297,31 @@ export function CalendarScreen() {
         </View>
       )}
 
+      <View style={styles.quickAddRow}>
+        <TextInput
+          testID="quick-add-input"
+          value={inputText}
+          onChangeText={(text) => {
+            setInputText(text);
+            setErrorMessage(null);
+          }}
+          onSubmitEditing={handleSubmit}
+          placeholder="15시 회의"
+          placeholderTextColor={colors.warmGray}
+          style={styles.quickAddInput}
+          returnKeyType="done"
+        />
+        <Pressable testID="quick-add-submit" onPress={handleSubmit} style={styles.quickAddButton}>
+          <Text style={styles.quickAddButtonText}>{editingId ? '수정' : '등록'}</Text>
+        </Pressable>
+        {editingId ? (
+          <Pressable onPress={resetEntry} style={styles.quickAddCancel}>
+            <Text style={styles.quickAddCancelText}>취소</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
       {holidayName ? (
         <View style={styles.holidayBanner}>
           <Text style={styles.holidayBannerText}>{holidayName}</Text>
@@ -250,11 +337,25 @@ export function CalendarScreen() {
           <View
             style={[styles.eventCard, { borderLeftColor: CATEGORY_COLOR[item.category] ?? colors.warmGray }]}
           >
-            <Text style={styles.eventCategory}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
-            <Text style={styles.eventTitle}>{item.title}</Text>
-            <Text style={styles.eventTime}>
-              {item.time} · {item.durationMin}분
-            </Text>
+            <View style={styles.eventCardBody}>
+              <Text style={styles.eventCategory}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
+              <Text style={styles.eventTitle}>{item.title}</Text>
+              <Text style={styles.eventTime}>
+                {item.time} · {item.durationMin}분
+              </Text>
+            </View>
+            <View style={styles.eventCardActions}>
+              <Pressable
+                testID={`delete-${item.id}`}
+                onPress={() => handleDelete(item.id)}
+                style={styles.deleteButton}
+              >
+                <Text style={styles.deleteButtonText}>×</Text>
+              </Pressable>
+              <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
+                <Text style={styles.editButtonText}>수정</Text>
+              </Pressable>
+            </View>
           </View>
         )}
       />
@@ -392,6 +493,45 @@ const styles = StyleSheet.create({
     backgroundColor: colors.terracotta,
     marginTop: 2,
   },
+  quickAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  quickAddInput: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: colors.textDark,
+  },
+  quickAddButton: {
+    backgroundColor: colors.terracotta,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  quickAddButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  quickAddCancel: {
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  quickAddCancelText: {
+    color: colors.warmGray,
+    fontSize: 13,
+  },
+  errorText: {
+    color: colors.terracotta,
+    fontSize: 12,
+    marginBottom: 10,
+  },
   holidayBanner: {
     backgroundColor: colors.lightBeige,
     borderRadius: 12,
@@ -408,11 +548,43 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   eventCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     backgroundColor: colors.white,
     borderLeftWidth: 4,
     borderRadius: 10,
     padding: 14,
     marginBottom: 12,
+  },
+  eventCardBody: {
+    flex: 1,
+  },
+  eventCardActions: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginLeft: 10,
+  },
+  deleteButton: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
+    color: colors.warmGray,
+    fontSize: 16,
+    lineHeight: 16,
+  },
+  editButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: colors.lightBeige,
+  },
+  editButtonText: {
+    color: colors.textDark,
+    fontSize: 12,
+    fontWeight: '600',
   },
   eventCategory: {
     fontSize: 11,
