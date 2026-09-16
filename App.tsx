@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { GoogleConnectBanner } from './components/GoogleConnectBanner';
 import { Sidebar } from './components/Sidebar';
 import type { NavKey } from './components/Sidebar';
 import { colors } from './constants/colors';
@@ -24,6 +25,7 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <StatusBar style="dark" />
+        <GoogleConnectBanner />
         <View style={styles.shell}>
           <Sidebar active={activeNav} onSelect={setActiveNav} compact={compactSidebar} />
           <View style={styles.main}>
