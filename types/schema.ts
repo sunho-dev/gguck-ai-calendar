@@ -49,6 +49,18 @@ export interface ShiftAssignment {
   source: 'photo' | 'manual'
 }
 
+/**
+ * 사용자가 텍스트로 쓰는 개인/그룹 은어 장소 이름을 실제 장소로 매핑.
+ * "AI 해석 API"가 모르는 장소를 만나면 사용자에게 확인받아 여기에 쌓인다.
+ */
+export interface PlaceAlias {
+  userId: string
+  alias: string // 사용자가 쓰는 원문 표현, 예: "종숲"
+  name: string // 실제 장소명, 예: "서울숲클라이밍 종로점"
+  address: string | null
+  createdAt: ISODateTime
+}
+
 export interface Reminder {
   id: string
   eventId: string
