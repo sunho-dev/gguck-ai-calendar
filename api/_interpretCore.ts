@@ -1,4 +1,6 @@
-import { FinishReason, GoogleGenAI } from '@google/genai'
+// '/node' 서브패스를 명시해서, 번들러가 조건부 export를 잘못 해석해
+// 브라우저용 빌드를 로드하는 사고를 방지한다.
+import { FinishReason, GoogleGenAI } from '@google/genai/node'
 
 export interface InterpretedEvent {
   title: string

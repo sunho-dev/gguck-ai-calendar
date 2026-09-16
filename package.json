@@ -2,6 +2,9 @@
   "name": "gguck",
   "version": "1.0.0",
   "main": "index.ts",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.15",
     "@google/genai": "^2.22.0",
