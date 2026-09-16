@@ -6,11 +6,11 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Sidebar } from './components/Sidebar';
 import type { NavKey } from './components/Sidebar';
 import { colors } from './constants/colors';
+import { AssistantScreen } from './screens/AssistantScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { PlaceholderScreen } from './screens/PlaceholderScreen';
 
-const PLACEHOLDER_TITLES: Record<Exclude<NavKey, 'calendar'>, string> = {
-  assistant: '일정 비서',
+const PLACEHOLDER_TITLES: Record<Exclude<NavKey, 'calendar' | 'assistant'>, string> = {
   rules: '나의 규칙',
   alerts: '알림함',
 };
@@ -29,6 +29,8 @@ export default function App() {
           <View style={styles.main}>
             {activeNav === 'calendar' ? (
               <CalendarScreen />
+            ) : activeNav === 'assistant' ? (
+              <AssistantScreen />
             ) : (
               <PlaceholderScreen title={PLACEHOLDER_TITLES[activeNav]} />
             )}

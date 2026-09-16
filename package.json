@@ -5,6 +5,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
     "@expo/metro-runtime": "~57.0.15",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.23",
     "expo-linear-gradient": "~57.0.2",
     "expo-status-bar": "~57.0.1",

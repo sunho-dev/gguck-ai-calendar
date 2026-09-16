@@ -1,6 +1,7 @@
-import type { InterpretedEvent } from '../api/interpret'
+import type { InterpretedEvent, KnownPlaceAlias } from '../api/interpret'
+import { getPlaceAliases } from './placeAliasStore'
 
-export type { InterpretedEvent }
+export type { InterpretedEvent, KnownPlaceAlias }
 
 interface InterpretEventParams {
   text: string
@@ -8,6 +9,13 @@ interface InterpretEventParams {
 }
 
 export async function interpretEvent({ text, createdFrom }: InterpretEventParams): Promise<InterpretedEvent> {
+  const storedAliases = await getPlaceAliases()
+  const knownAliases: KnownPlaceAlias[] = storedAliases.map((a) => ({
+    alias: a.alias,
+    name: a.name,
+    address: a.address,
+  }))
+
   const response = await fetch('/api/interpret', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -15,6 +23,7 @@ export async function interpretEvent({ text, createdFrom }: InterpretEventParams
       text,
       createdFrom,
       now: new Date().toISOString(),
+      knownAliases,
     }),
   })
 
