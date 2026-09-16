@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
     "@expo/metro-runtime": "~57.0.15",
     "expo": "~57.0.23",
     "expo-linear-gradient": "~57.0.2",
@@ -15,13 +16,16 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "@vercel/node": "^13.0.1",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test:interpret": "tsx scripts/test-interpret.ts"
   },
   "private": true
 }
