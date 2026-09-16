@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
@@ -18,9 +18,9 @@ import {
 } from '../utils/date';
 import { generateEventId, parseQuickEntry } from '../utils/quickEntry';
 import { interpretEvent } from '../utils/interpretEvent';
-import { buildGoogleCalendarUrl } from '../utils/googleCalendar';
 import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
+import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 
 interface ResolvedEntry {
   title: string;
@@ -135,7 +135,7 @@ type ViewMode = 'week' | 'month';
 export function CalendarScreen() {
   const today = useMemo(() => todayISODate(), []);
   const googleStatus = useGoogleSyncStatus();
-  const [events, setEvents] = useState<Event[]>(() => buildSampleEvents(today));
+  const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? buildSampleEvents(today));
   const [selectedDate, setSelectedDate] = useState(today);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [viewedMonth, setViewedMonth] = useState(() => startOfMonth(today));
@@ -143,6 +143,11 @@ export function CalendarScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+
+  useEffect(() => {
+    saveStoredEvents(events);
+  }, [events]);
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i)), [today]);
   const monthGrid = useMemo(() => buildMonthGrid(viewedMonth), [viewedMonth]);
@@ -167,6 +172,15 @@ export function CalendarScreen() {
     setErrorMessage(null);
   };
 
+  const runGoogleSync = async (task: () => Promise<string | null | void>) => {
+    setPendingSyncCount((count) => count + 1);
+    try {
+      return await task();
+    } finally {
+      setPendingSyncCount((count) => count - 1);
+    }
+  };
+
   const handleSubmit = async () => {
     const text = inputText.trim();
     if (!text || isSubmitting) return;
@@ -189,7 +203,7 @@ export function CalendarScreen() {
       const updated: Event = { ...existing, ...resolved, startDate: selectedDate, endDate: selectedDate };
       setEvents((prev) => prev.map((event) => (event.id === editingId ? updated : event)));
       if (googleStatus.connected) {
-        syncEventUpdate(updated).then((googleEventId) => {
+        runGoogleSync(() => syncEventUpdate(updated)).then((googleEventId) => {
           if (googleEventId) applyGoogleEventId(updated.id, googleEventId);
         });
       }
@@ -205,7 +219,7 @@ export function CalendarScreen() {
       };
       setEvents((prev) => [...prev, newEvent]);
       if (googleStatus.connected) {
-        syncEventCreate(newEvent).then((googleEventId) => {
+        runGoogleSync(() => syncEventCreate(newEvent)).then((googleEventId) => {
           if (googleEventId) applyGoogleEventId(newEvent.id, googleEventId);
         });
       }
@@ -234,12 +248,8 @@ export function CalendarScreen() {
       resetEntry();
     }
     if (googleStatus.connected) {
-      syncEventDelete(event);
+      runGoogleSync(() => syncEventDelete(event));
     }
-  };
-
-  const handleAddToGoogle = (event: Event) => {
-    Linking.openURL(buildGoogleCalendarUrl(event));
   };
 
   return (
@@ -430,28 +440,19 @@ export function CalendarScreen() {
               >
                 <Text style={styles.deleteButtonText}>×</Text>
               </Pressable>
-              <View style={styles.secondaryButtonRow}>
-                {googleStatus.connected ? (
-                  <Text style={styles.syncedBadge}>
-                    {item.googleEventId ? '✓ 구글 동기화됨' : '동기화 중…'}
-                  </Text>
-                ) : (
-                  <Pressable
-                    testID={`google-${item.id}`}
-                    onPress={() => handleAddToGoogle(item)}
-                    style={styles.googleButton}
-                  >
-                    <Text style={styles.googleButtonText}>구글</Text>
-                  </Pressable>
-                )}
-                <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
-                  <Text style={styles.editButtonText}>수정</Text>
-                </Pressable>
-              </View>
+              <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
+                <Text style={styles.editButtonText}>수정</Text>
+              </Pressable>
             </View>
           </View>
         )}
       />
+
+      {googleStatus.connected ? (
+        <Text style={styles.syncStatusText}>
+          {pendingSyncCount > 0 ? '구글 캘린더와 동기화 중…' : '✓ 구글 캘린더와 동기화 완료'}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -671,10 +672,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 16,
   },
-  secondaryButtonRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
   editButton: {
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -686,21 +683,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  googleButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: colors.lightBeige,
-  },
-  googleButtonText: {
-    color: colors.textDark,
+  syncStatusText: {
     fontSize: 12,
-    fontWeight: '600',
-  },
-  syncedBadge: {
-    fontSize: 11,
     color: colors.warmGray,
-    alignSelf: 'center',
+    textAlign: 'center',
+    paddingVertical: 8,
   },
   eventCategory: {
     fontSize: 11,
