@@ -74,8 +74,8 @@ function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): str
     'category는 "회의", "약속", "여행", "병원", "기타" 등 텍스트 성격에 맞는 짧은 한국어 단어로 분류하라.',
     '모델이 추측했거나 확신이 낮은 필드가 있으면 ambiguousFields 배열에 해당 필드명을 넣고, confidence를 낮춰라.',
     '',
-    '--- 장소(place) 처리 규칙 ---',
-    '텍스트에서 장소로 보이는 표현이 나오면 아래 순서로 판단하라:',
+    '--- 장소(place) 처리 규칙: 반드시 지킬 것 ---',
+    '텍스트를 볼 때, 날짜/시간 표현도 아니고 "가자/ㄱ/보자/콜" 같은 행동 유도 표현도 아닌 명사(특히 2~4글자 정도의 짧은 단어)가 있으면, 그건 장소일 가능성이 매우 높다. 조사("~에서", "~에")가 안 붙어있어도, 심지어 처음 보는 낯선 단어라도 절대 무시하지 말고 place 후보로 취급하라. 장소로 보이는 단어를 그냥 버리고(null로 남기고) 넘어가는 것이 가장 흔한 실수이니 특히 주의하라.',
   ]
 
   if (knownAliases.length > 0) {
@@ -94,8 +94,13 @@ function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): str
   }
 
   lines.push(
-    '3) place.name에는 텍스트에 쓰인 장소 표현을 원문 그대로 넣고, address는 모르면 null로 남겨라(지어내지 마라). 이 표현이 흔한 일반 지명/상호(예: "강남역 스타벅스")면 placeAliasCandidate는 null로 둔다. 반면 문맥상 사용자 개인/그룹만 아는 은어·줄임말처럼 보이면(예: 사전에 없을 법한 압축된 단어) placeAliasCandidate에 그 원문을 넣고 ambiguousFields에 "place"를 추가하라.',
-    '텍스트에 장소 표현 자체가 없으면 place와 placeAliasCandidate 모두 null로 둔다.',
+    '3) place.name에는 텍스트에 쓰인 장소로 보이는 표현을 원문 그대로 넣고, address는 모르면 null로 남겨라(지어내지 마라). 이 표현이 흔한 일반 지명/상호(예: "강남역 스타벅스")면 placeAliasCandidate는 null로 둔다. 반면 사전에 없을 법한 짧은 단어·줄임말이면(예: "종숲", "잠숲") placeAliasCandidate에 그 원문을 넣고 ambiguousFields에 "place"를 추가하라 — 이런 경우 place도 null로 두지 말고 원문 그대로 채워야 한다.',
+    '오직 텍스트 전체를 다 읽어봐도 장소로 볼 만한 단어가 정말 하나도 없을 때만 place와 placeAliasCandidate를 둘 다 null로 둔다.',
+    '',
+    '--- 예시 ---',
+    '입력: "내일 5시 종숲 ㄱ" (별명 목록이 비어있는 경우)',
+    '올바른 출력의 place, placeAliasCandidate 부분: place: {"name": "종숲", "address": null}, placeAliasCandidate: "종숲", ambiguousFields에 "place" 포함',
+    '(틀린 예: place와 placeAliasCandidate를 둘 다 null로 남기는 것 — "종숲"은 시간 표현도 행동 유도 표현도 아니므로 반드시 장소 후보로 잡아야 한다)',
   )
 
   return lines.join('\n')
