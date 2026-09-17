@@ -1,7 +1,12 @@
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import * as XLSX from 'xlsx';
 import {useRef,useState} from 'react';
-import {Modal,Pressable,ScrollView,StyleSheet,Text,TextInput,View,Switch,useWindowDimensions} from 'react-native';
+import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,Switch,useWindowDimensions} from 'react-native';
 import {AgendaPreview} from '../components/AgendaPreview';
 import DateTimeField from '../components/DateTimeField';
+import {ImportReviewList} from '../components/ImportReviewList';
 import {Choice,RepeatChoices,RepeatFields,recurrenceFor,type RepeatMode} from '../components/ScheduleControls';
 import {useScheduleStaging} from '../utils/useScheduleStaging';
 import {colors} from '../constants/colors';
@@ -12,6 +17,10 @@ import {loadStoredEvents,saveStoredEvents} from '../utils/eventsStorage';
 import {getGoogleSyncStatus,syncEventCreate,syncEventDelete} from '../utils/googleSync';
 import {categoryKey,loadRules,toEvent,toSchedule} from '../utils/scheduleAdapter';
 import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,type Schedule,type Category} from '../utils/scheduler';
+import {generateEventId} from '../utils/quickEntry';
+import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
+import {interpretBulkImage,interpretBulkTable} from '../utils/bulkInterpret';
+import {loadMyName,saveMyName} from '../utils/myNameStorage';
 
 type Scope='one'|'following'|'all';
 export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;onRules?:()=>void;onCalendar?:()=>void}){
@@ -23,8 +32,72 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  const [name,setName]=useState(''),[address,setAddress]=useState(''),[category,setCategory]=useState<Category>('personal'),[remember,setRemember]=useState(true);
  const [issues,setIssues]=useState<string[]>([]),[choices,setChoices]=useState<Schedule[]>([]),[skipped,setSkipped]=useState<string[]>([]);
  const [cancelChoices,setCancelChoices]=useState<Schedule[]>([]),[target,setTarget]=useState<Schedule|null>(null),[scope,setScope]=useState<Scope>('one');
+ const [importDrafts,setImportDrafts]=useState<ImportedEventDraft[]|null>(null),[importSource,setImportSource]=useState<string|null>(null);
+ const [importError,setImportError]=useState<string|null>(null),[isImporting,setIsImporting]=useState(false),[myName,setMyName]=useState(()=>loadMyName());
  const lock=useRef(false);
  const all=()=>loadStoredEvents()||[];
+ const handleMyNameChange=(value:string)=>{setMyName(value);saveMyName(value);};
+ const handleImportIcs=async()=>{
+  setImportError(null);
+  const picked=await DocumentPicker.getDocumentAsync({type:'*/*'});
+  if(picked.canceled)return;
+  const asset=picked.assets[0];
+  try{
+   const content=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
+   const drafts=parseIcsContent(content);
+   if(drafts.length===0){setImportError('.ics 파일에서 일정을 찾지 못했어요.');return;}
+   setImportSource('.ics 파일에서 찾은 일정');setImportDrafts(drafts);
+  }catch(err){console.warn('[ics-import] 실패:',err);setImportError('.ics 파일을 읽는 데 실패했어요.');}
+ };
+ const handleImportExcel=async()=>{
+  setImportError(null);
+  const picked=await DocumentPicker.getDocumentAsync({type:'*/*'});
+  if(picked.canceled)return;
+  const asset=picked.assets[0];
+  try{
+   let csvText:string;
+   if(asset.name.toLowerCase().endsWith('.csv')){
+    csvText=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
+   }else{
+    const buffer=asset.file?await asset.file.arrayBuffer():await(await fetch(asset.uri)).arrayBuffer();
+    const workbook=XLSX.read(buffer,{type:'array'});
+    csvText=XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
+   }
+   setIsImporting(true);
+   const drafts=await interpretBulkTable(csvText,myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('파일에서 일정을 찾지 못했어요.');return;}
+   setImportSource('엑셀 파일에서 찾은 일정');setImportDrafts(drafts);
+  }catch(err){setIsImporting(false);console.warn('[excel-import] 실패:',err);setImportError(err instanceof Error?err.message:'엑셀 파일을 처리하는 데 실패했어요.');}
+ };
+ const handleImportPhoto=async()=>{
+  setImportError(null);
+  const picked=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],quality:1});
+  if(picked.canceled)return;
+  const asset=picked.assets[0];
+  try{
+   setIsImporting(true);
+   const maxDimension=1600,isLandscape=asset.width>=asset.height;
+   const resizeAction=isLandscape?{resize:{width:Math.min(asset.width,maxDimension)}}:{resize:{height:Math.min(asset.height,maxDimension)}};
+   const manipulated=await manipulateAsync(asset.uri,[resizeAction],{base64:true,compress:.7,format:SaveFormat.JPEG});
+   if(!manipulated.base64){setImportError('이미지를 처리하지 못했어요.');setIsImporting(false);return;}
+   const drafts=await interpretBulkImage(manipulated.base64,'image/jpeg',myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('사진에서 일정을 찾지 못했어요.');return;}
+   setImportSource('사진에서 찾은 일정');setImportDrafts(drafts);
+  }catch(err){setIsImporting(false);console.warn('[photo-import] 실패:',err);setImportError(err instanceof Error?err.message:'사진을 처리하는 데 실패했어요.');}
+ };
+ const handleConfirmImport=async(selected:ImportedEventDraft[])=>{
+  const created:Event[]=selected.map(draft=>({
+   id:generateEventId(),userId:'local',title:draft.title,category:'personal',
+   startDate:draft.startDate,endDate:draft.startDate,time:draft.time,durationMin:draft.durationMin,
+   place:draft.place?{...draft.place,lat:0,lng:0}:null,remindMin:0,bufferMin:0,createdFrom:'paste',sharedWith:[],
+  }));
+  saveStoredEvents([...all(),...created]);
+  setImportDrafts(null);
+  setNotice(`가져온 일정 ${created.length}개를 등록했어요.`);
+  if(created[0])setSelectedDate(created[0].startDate);
+ };
  useScheduleStaging(async({text:input})=>{
   if(lock.current||draft||target||cancelChoices.length)throw Error('현재 확인 중인 요청을 먼저 마쳐 주세요.');
   if(typeof input!=='string'||!input.trim()||input.length>300||hasCancelIntent(input))throw Error('300자 이내의 등록 검토 문장을 입력해 주세요. 취소는 입력창에서 요청해 주세요.');
@@ -111,6 +184,13 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {button(busy?'처리 중…':hasCancelIntent(text)?'요청 보내기':'일정 등록',()=>void submit())}
  <Text style={styles.label}>확인이 필요할 때만 물어봐요. 소요 시간 생략 시 60분.</Text>
  <Text style={styles.sectionTitle}>이렇게 말해보세요</Text><View style={styles.row}>{['내일 오후 8시 운동','매주 월수금 오후 8시 운동','다음주 금요일 8시 종숲 ㄱ','내일 운동 취소'].map(example=><Choice key={example} label={example} disabled={busy} onPress={()=>{setText(example);setRepeatMode('none');}}/>)}</View></View>
+ {Platform.OS==='web'&&<View style={styles.panel}><Text style={styles.sectionTitle}>여러 일정 한 번에 가져오기</Text><Text style={styles.label}>.ics 파일, 근무표 엑셀, 근무표 사진에서 일정을 한 번에 뽑아 등록해요.</Text>
+ {field('표/사진 속 내 이름',myName,handleMyNameChange)}
+ {!importDrafts&&<View style={styles.row}>{button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}{button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}{button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}</View>}
+ {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
+ {!!importError&&<Text style={styles.notice}>{importError}</Text>}
+ {importDrafts&&<ImportReviewList title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={selected=>void handleConfirmImport(selected)} onCancel={()=>setImportDrafts(null)}/>}
+ </View>}
  <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
  <View style={styles.panel}><Text style={styles.sectionTitle}>말 한마디가 일정이 되는 순간.</Text><Text style={styles.label}>등록도 취소도 한 문장으로. 일정은 이 브라우저에 저장돼요.</Text></View></View>
  <View style={{flex:wide?1:undefined,minWidth:0}}><AgendaPreview date={selectedDate} onDate={setSelectedDate} onRules={onRules} onCalendar={onCalendar}/></View></View>

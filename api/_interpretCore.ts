@@ -85,7 +85,7 @@ export function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[
 // gemini-3.6-flash는 추출 품질이 불안정, gemini-3.8-flash는 무료 티어 수요 폭주로 503,
 // gemini-3.5-flash는 무료 할당량이 하루 20건뿐이라 금방 소진됨(429).
 // gemini-3.1-flash-lite는 하루 약 500건으로 훨씬 넉넉해서 실사용에 적합.
-const MODEL = 'gemini-3.1-flash-lite'
+export const MODEL = 'gemini-3.1-flash-lite'
 
 export async function interpretEventText(
   text: string,

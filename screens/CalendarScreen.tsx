@@ -23,7 +23,6 @@ import { interpretEvent } from '../utils/interpretEvent';
 import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
-import { downloadIcsForEvent } from '../utils/ics';
 
 interface ResolvedEntry {
   title: string;
@@ -436,15 +435,6 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
             </View>
             <View style={styles.eventCardActions}>
               <View style={styles.secondaryButtonRow}>
-                {Platform.OS === 'web' ? (
-                  <Pressable
-                    testID={`ics-${item.id}`}
-                    onPress={() => downloadIcsForEvent(item)}
-                    style={styles.icsButton}
-                  >
-                    <Text style={styles.icsButtonText}>.ics</Text>
-                  </Pressable>
-                ) : null}
                 <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
                   <Text style={styles.editButtonText}>수정</Text>
                 </Pressable>
@@ -689,17 +679,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lightBeige,
   },
   editButtonText: {
-    color: colors.textDark,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  icsButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: colors.lightBeige,
-  },
-  icsButtonText: {
     color: colors.textDark,
     fontSize: 12,
     fontWeight: '600',
