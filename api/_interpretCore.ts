@@ -66,13 +66,17 @@ const EVENT_SCHEMA: Schema = {
   ],
 }
 
-function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): string {
+function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[], knownCategories: string[]): string {
   const lines = [
     '너는 사용자가 붙여넣거나 공유한 텍스트(카카오톡 대화, 공지, 초대장 등)에서 일정 정보를 추출하는 도우미다.',
     `현재 시각은 ${nowIso} (한국 시간, KST)이다. "내일", "다음주 화요일", "이번 주말" 같은 상대적 날짜 표현은 이 시각을 기준으로 계산하라.`,
     'startDate/endDate는 항상 YYYY-MM-DD 형식이다. 기간이 없는 단일 일정이면 startDate와 endDate를 동일하게 채워라.',
     '텍스트에 명시되지 않은 값(시간, 소요 시간 등)은 추측하지 말고 null로 남겨라. 다만 title과 category는 항상 채워야 하며, 정보가 부족하면 텍스트 내용을 바탕으로 합리적으로 요약하라.',
-    'category는 "회의", "약속", "여행", "병원", "기타" 등 텍스트 성격에 맞는 짧은 한국어 단어로 분류하라.',
+    '',
+    '--- category 처리 규칙 ---',
+    knownCategories.length > 0
+      ? `이 사용자가 이미 만들어둔 카테고리 목록: ${knownCategories.join(', ')}. 텍스트 내용이 이 중 하나와 어울리면 반드시 그 이름을 그대로 써라(살짝 다른 표현으로 새로 만들지 말 것, 예: 목록에 "운동"이 있으면 "헬스"라고 새로 만들지 말고 "운동"을 써라). 어느 것과도 안 어울리면, 새로운 카테고리 이름을 2~4글자의 짧은 한국어 단어로 만들어서 채워라(예: "클라이밍", "병원", "여행"). 새 카테고리를 만든 경우 ambiguousFields에 "category"를 추가해서 사용자 확인이 필요하다고 표시하라.`
+      : '아직 등록된 카테고리가 없다. 텍스트 성격에 맞는 짧은 한국어 단어(2~4글자)로 새 카테고리를 만들어 채우고, ambiguousFields에 "category"를 추가하라.',
     '모델이 추측했거나 확신이 낮은 필드가 있으면 ambiguousFields 배열에 해당 필드명을 넣고, confidence를 낮춰라.',
     '',
     '--- 장소(place) 처리 규칙: 반드시 지킬 것 ---',
@@ -124,6 +128,7 @@ export async function interpretEventText(
   nowIso: string,
   apiKey: string,
   knownAliases: KnownPlaceAlias[] = [],
+  knownCategories: string[] = [],
 ): Promise<InterpretedEvent> {
   const client = new GoogleGenAI({ apiKey })
 
@@ -131,7 +136,7 @@ export async function interpretEventText(
     model: MODEL,
     contents: text,
     config: {
-      systemInstruction: buildSystemPrompt(nowIso, knownAliases),
+      systemInstruction: buildSystemPrompt(nowIso, knownAliases, knownCategories),
       responseMimeType: 'application/json',
       responseSchema: EVENT_SCHEMA,
     },

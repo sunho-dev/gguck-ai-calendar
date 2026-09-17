@@ -4,7 +4,7 @@ import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from
 import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
 import koreanHolidays from '../data/koreanHolidays.json';
-import type { Event } from '../types/schema';
+import type { Category, Event } from '../types/schema';
 import {
   addDays,
   addMonths,
@@ -21,6 +21,7 @@ import { interpretEvent } from '../utils/interpretEvent';
 import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
+import { getCategories } from '../utils/categoryStore';
 import { downloadIcsForEvent } from '../utils/ics';
 
 interface ResolvedEntry {
@@ -33,7 +34,7 @@ interface ResolvedEntry {
   bufferMin: number;
 }
 
-// 길선호 팀원의 /api/interpret(Claude 기반 AI 해석)를 우선 쓰고, 배포되지 않은 환경(로컬 네이티브 등)에서
+// 길선호 팀원의 /api/interpret(Gemini 기반 AI 해석)를 우선 쓰고, 배포되지 않은 환경(로컬 네이티브 등)에서
 // 호출이 실패하면 자체 정규식 파서로 대체한다. 날짜는 항상 캘린더에서 선택한 날짜를 그대로 쓴다
 // (텍스트 속 상대 날짜 표현으로 바뀌면 "날짜 선택 후 입력" 흐름과 어긋나서 의도적으로 덮어쓴다).
 async function resolveQuickEntry(text: string): Promise<ResolvedEntry | null> {
@@ -67,27 +68,13 @@ async function resolveQuickEntry(text: string): Promise<ResolvedEntry | null> {
 const HOLIDAYS: Record<string, string> = koreanHolidays;
 const WEEKDAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
 
-const CATEGORY_LABEL: Record<string, string> = {
-  exercise: '운동',
-  work: '업무',
-  personal: '개인',
-  study: '공부',
-};
-
-const CATEGORY_COLOR: Record<string, string> = {
-  exercise: colors.terracotta,
-  work: colors.warmGray,
-  personal: colors.coral,
-  study: colors.lightBeige,
-};
-
 function buildSampleEvents(today: string): Event[] {
   return [
     {
       id: 'sample-1',
       userId: 'local',
       title: '팀 데일리 미팅',
-      category: 'work',
+      category: '업무',
       startDate: today,
       endDate: today,
       time: '10:00',
@@ -102,7 +89,7 @@ function buildSampleEvents(today: string): Event[] {
       id: 'sample-2',
       userId: 'local',
       title: '저녁 러닝',
-      category: 'exercise',
+      category: '운동',
       startDate: today,
       endDate: today,
       time: '19:00',
@@ -117,7 +104,7 @@ function buildSampleEvents(today: string): Event[] {
       id: 'sample-3',
       userId: 'local',
       title: '친구와 저녁 약속',
-      category: 'personal',
+      category: '약속',
       startDate: addDays(today, 1),
       endDate: addDays(today, 1),
       time: '19:30',
@@ -145,6 +132,11 @@ export function CalendarScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [categories, setCategories] = useState<Category[]>([]);
+
+  useEffect(() => {
+    getCategories().then(setCategories);
+  }, []);
 
   useEffect(() => {
     saveStoredEvents(events);
@@ -422,16 +414,18 @@ export function CalendarScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.agendaList}
         ListEmptyComponent={<Text style={styles.emptyText}>등록된 일정이 없어요.</Text>}
-        renderItem={({ item }) => (
-          <View
-            style={[styles.eventCard, { borderLeftColor: CATEGORY_COLOR[item.category] ?? colors.warmGray }]}
-          >
-            <View style={styles.eventCardBody}>
-              <Text style={styles.eventCategory}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
-              <Text style={styles.eventTitle}>{item.title}</Text>
-              <Text style={styles.eventTime}>
-                {item.time} · {item.durationMin}분
-              </Text>
+        renderItem={({ item }) => {
+          const categoryColor =
+            categories.find((c) => c.name.trim().toLowerCase() === item.category.trim().toLowerCase())?.color ??
+            colors.warmGray;
+          return (
+            <View style={[styles.eventCard, { borderLeftColor: categoryColor }]}>
+              <View style={styles.eventCardBody}>
+                <Text style={styles.eventCategory}>{item.category}</Text>
+                <Text style={styles.eventTitle}>{item.title}</Text>
+                <Text style={styles.eventTime}>
+                  {item.time} · {item.durationMin}분
+                </Text>
             </View>
             <View style={styles.eventCardActions}>
               <Pressable
@@ -457,7 +451,8 @@ export function CalendarScreen() {
               </View>
             </View>
           </View>
-        )}
+          );
+        }}
       />
 
       {googleStatus.connected ? (

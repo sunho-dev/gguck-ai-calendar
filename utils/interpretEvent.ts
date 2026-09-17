@@ -1,5 +1,6 @@
 import type { InterpretedEvent, KnownPlaceAlias } from '../api/interpret'
 import { getPlaceAliases } from './placeAliasStore'
+import { getCategories } from './categoryStore'
 
 export type { InterpretedEvent, KnownPlaceAlias }
 
@@ -15,7 +16,12 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function requestInterpret(text: string, createdFrom: InterpretEventParams['createdFrom'], knownAliases: KnownPlaceAlias[]) {
+async function requestInterpret(
+  text: string,
+  createdFrom: InterpretEventParams['createdFrom'],
+  knownAliases: KnownPlaceAlias[],
+  knownCategories: string[],
+) {
   const response = await fetch('/api/interpret', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -24,6 +30,7 @@ async function requestInterpret(text: string, createdFrom: InterpretEventParams[
       createdFrom,
       now: new Date().toISOString(),
       knownAliases,
+      knownCategories,
     }),
   })
 
@@ -39,18 +46,19 @@ async function requestInterpret(text: string, createdFrom: InterpretEventParams[
 }
 
 export async function interpretEvent({ text, createdFrom }: InterpretEventParams): Promise<InterpretedEvent> {
-  const storedAliases = await getPlaceAliases()
+  const [storedAliases, storedCategories] = await Promise.all([getPlaceAliases(), getCategories()])
   const knownAliases: KnownPlaceAlias[] = storedAliases.map((a) => ({
     alias: a.alias,
     name: a.name,
     address: a.address,
     category: a.category,
   }))
+  const knownCategories = storedCategories.map((c) => c.name)
 
   let lastError: unknown
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await requestInterpret(text, createdFrom, knownAliases)
+      return await requestInterpret(text, createdFrom, knownAliases, knownCategories)
     } catch (err) {
       lastError = err
       const status = (err as Error & { status?: number }).status

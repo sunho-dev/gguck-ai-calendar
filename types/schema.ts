@@ -63,6 +63,19 @@ export interface PlaceAlias {
   createdAt: ISODateTime
 }
 
+/**
+ * 사용자가 직접 만드는 일정 카테고리. 마이듀티의 근무 기호처럼 이름 + 색 블록으로 관리한다.
+ * 미리 정해진 목록이 없다 — 처음 등장하는 카테고리는 AI 해석 결과로 제안되고, 사용자가 색을
+ * 고르면 그때부터 이 목록에 쌓여서 다음엔 탭 한 번으로 재사용한다.
+ */
+export interface Category {
+  id: string
+  userId: string
+  name: string // 예: "클라이밍"
+  color: string // hex, 예: "#C56F5D"
+  createdAt: ISODateTime
+}
+
 export interface Reminder {
   id: string
   eventId: string

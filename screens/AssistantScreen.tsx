@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { colors } from '../constants/colors';
+import { categoryPalette, colors } from '../constants/colors';
 import { interpretEvent, type InterpretedEvent } from '../utils/interpretEvent';
 import { savePlaceAlias } from '../utils/placeAliasStore';
+import { getCategories, saveCategory } from '../utils/categoryStore';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 import { generateEventId } from '../utils/quickEntry';
-import type { Event } from '../types/schema';
+import type { Category, Event } from '../types/schema';
 
 type PlaceStep =
   | { kind: 'none' }
@@ -30,6 +31,15 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
   const [categoryInput, setCategoryInput] = useState('');
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [registeredEventId, setRegisteredEventId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [pendingNewCategory, setPendingNewCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCategories().then(setCategories);
+  }, []);
+
+  const findCategory = (name: string) =>
+    categories.find((c) => c.name.trim().toLowerCase() === name.trim().toLowerCase()) ?? null;
 
   const runInterpret = async () => {
     if (!text.trim()) return;
@@ -39,10 +49,18 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
     setSavedNotice(null);
     setPlaceStep({ kind: 'none' });
     setRegisteredEventId(null);
+    setPendingNewCategory(null);
     try {
       const event = await interpretEvent({ text, createdFrom: autoRun ? 'share' : 'paste' });
       setResult(event);
       setCategoryInput(event.category); // 확인/입력 화면에서 바로 고칠 수 있게 미리 채워둠
+
+      const latestCategories = await getCategories();
+      setCategories(latestCategories);
+      const known = latestCategories.find((c) => c.name.trim().toLowerCase() === event.category.trim().toLowerCase());
+      if (!known) {
+        setPendingNewCategory(event.category);
+      }
 
       const placeIsAmbiguous = event.ambiguousFields.includes('place');
       if (placeIsAmbiguous && event.placeAliasCandidate) {
@@ -100,6 +118,19 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
     if (!registeredEventId) return;
     saveStoredEvents((loadStoredEvents() ?? []).filter((e) => e.id !== registeredEventId));
     setRegisteredEventId(null);
+  };
+
+  const pickColorForNewCategory = async (color: string) => {
+    if (!pendingNewCategory) return;
+    const saved = await saveCategory({ name: pendingNewCategory, color });
+    setCategories((prev) => [...prev.filter((c) => c.id !== saved.id), saved]);
+    setPendingNewCategory(null);
+  };
+
+  const applyCategory = (category: Category) => {
+    setResult((prev) => (prev ? { ...prev, category: category.name } : prev));
+    setCategoryInput(category.name);
+    setPendingNewCategory(null);
   };
 
   const confirmGuess = async () => {
@@ -177,7 +208,48 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
       {result && (
         <View style={styles.resultCard}>
           <Text style={styles.resultTitle}>{result.title}</Text>
-          <Text style={styles.resultLine}>카테고리: {result.category}</Text>
+
+          <View style={styles.categoryRow}>
+            <View
+              style={[
+                styles.categoryPill,
+                { backgroundColor: findCategory(result.category)?.color ?? colors.lightBeige },
+              ]}
+            >
+              <Text style={styles.categoryPillText}>{result.category}</Text>
+            </View>
+          </View>
+
+          {categories.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryPickRow}>
+              {categories.map((c) => (
+                <Pressable
+                  key={c.id}
+                  style={[styles.categoryChip, { borderColor: c.color }]}
+                  onPress={() => applyCategory(c)}
+                >
+                  <View style={[styles.categoryDot, { backgroundColor: c.color }]} />
+                  <Text style={styles.categoryChipText}>{c.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+
+          {pendingNewCategory && (
+            <View style={styles.newCategoryBox}>
+              <Text style={styles.fieldLabel}>"{pendingNewCategory}"는 새 카테고리예요. 색을 골라주세요</Text>
+              <View style={styles.colorSwatchRow}>
+                {categoryPalette.map((color) => (
+                  <Pressable
+                    key={color}
+                    style={[styles.colorSwatch, { backgroundColor: color }]}
+                    onPress={() => pickColorForNewCategory(color)}
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+
           <Text style={styles.resultLine}>
             날짜: {result.startDate}
             {result.endDate !== result.startDate ? ` ~ ${result.endDate}` : ''}
@@ -327,6 +399,60 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textDark,
     marginBottom: 8,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  categoryPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  categoryPillText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  categoryPickRow: {
+    marginBottom: 10,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginRight: 8,
+  },
+  categoryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    color: colors.textDark,
+    fontWeight: '600',
+  },
+  newCategoryBox: {
+    backgroundColor: colors.cream,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  colorSwatchRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 6,
+  },
+  colorSwatch: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   resultLine: {
     fontSize: 13,
