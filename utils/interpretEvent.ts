@@ -44,6 +44,7 @@ export async function interpretEvent({ text, createdFrom }: InterpretEventParams
     alias: a.alias,
     name: a.name,
     address: a.address,
+    category: a.category,
   }))
 
   let lastError: unknown

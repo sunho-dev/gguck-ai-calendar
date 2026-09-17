@@ -18,6 +18,7 @@ export function AssistantScreen() {
   const [placeStep, setPlaceStep] = useState<PlaceStep>({ kind: 'none' });
   const [manualName, setManualName] = useState('');
   const [manualAddress, setManualAddress] = useState('');
+  const [categoryInput, setCategoryInput] = useState('');
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const runInterpret = async () => {
@@ -30,6 +31,7 @@ export function AssistantScreen() {
     try {
       const event = await interpretEvent({ text, createdFrom: 'paste' });
       setResult(event);
+      setCategoryInput(event.category); // 확인/입력 화면에서 바로 고칠 수 있게 미리 채워둠
 
       const placeIsAmbiguous = event.ambiguousFields.includes('place');
       if (placeIsAmbiguous && event.placeAliasCandidate) {
@@ -53,12 +55,21 @@ export function AssistantScreen() {
 
   const confirmGuess = async () => {
     if (placeStep.kind !== 'confirmGuess') return;
+    const category = categoryInput.trim() || null;
     await savePlaceAlias({
       alias: placeStep.aliasText,
       name: placeStep.guessedName,
       address: placeStep.guessedAddress,
+      category,
     });
-    setSavedNotice(`"${placeStep.aliasText}" = ${placeStep.guessedName} 저장했어요. 다음부터는 안 물어볼게요.`);
+    setResult((prev) =>
+      prev
+        ? { ...prev, place: { name: placeStep.guessedName, address: placeStep.guessedAddress }, category: category ?? prev.category }
+        : prev,
+    );
+    setSavedNotice(
+      `"${placeStep.aliasText}" = ${placeStep.guessedName}${category ? ` (${category})` : ''} 저장했어요. 다음부터는 안 물어볼게요.`,
+    );
     setPlaceStep({ kind: 'none' });
   };
 
@@ -71,12 +82,20 @@ export function AssistantScreen() {
 
   const submitManual = async () => {
     if (placeStep.kind !== 'manualInput' || !manualName.trim()) return;
+    const category = categoryInput.trim() || null;
+    const address = manualAddress.trim() || null;
     await savePlaceAlias({
       alias: placeStep.aliasText,
       name: manualName.trim(),
-      address: manualAddress.trim() || null,
+      address,
+      category,
     });
-    setSavedNotice(`"${placeStep.aliasText}" = ${manualName.trim()} 저장했어요. 다음부터는 안 물어볼게요.`);
+    setResult((prev) =>
+      prev ? { ...prev, place: { name: manualName.trim(), address }, category: category ?? prev.category } : prev,
+    );
+    setSavedNotice(
+      `"${placeStep.aliasText}" = ${manualName.trim()}${category ? ` (${category})` : ''} 저장했어요. 다음부터는 안 물어볼게요.`,
+    );
     setPlaceStep({ kind: 'none' });
     setManualName('');
     setManualAddress('');
@@ -127,6 +146,14 @@ export function AssistantScreen() {
           <Text style={styles.confirmText}>
             "{placeStep.aliasText}"가 <Text style={styles.confirmStrong}>{placeStep.guessedName}</Text> 맞아요?
           </Text>
+          <Text style={styles.fieldLabel}>카테고리</Text>
+          <TextInput
+            style={styles.manualInput}
+            placeholder="예: 클라이밍, 약속, 운동..."
+            placeholderTextColor={colors.warmGray}
+            value={categoryInput}
+            onChangeText={setCategoryInput}
+          />
           <View style={styles.confirmButtonRow}>
             <Pressable style={styles.confirmButtonYes} onPress={confirmGuess}>
               <Text style={styles.confirmButtonText}>맞아요</Text>
@@ -154,6 +181,14 @@ export function AssistantScreen() {
             placeholderTextColor={colors.warmGray}
             value={manualAddress}
             onChangeText={setManualAddress}
+          />
+          <Text style={styles.fieldLabel}>카테고리</Text>
+          <TextInput
+            style={styles.manualInput}
+            placeholder="예: 클라이밍, 약속, 운동..."
+            placeholderTextColor={colors.warmGray}
+            value={categoryInput}
+            onChangeText={setCategoryInput}
           />
           <Pressable
             style={[styles.confirmButtonYes, !manualName.trim() && styles.buttonDisabled]}
@@ -254,6 +289,11 @@ const styles = StyleSheet.create({
   },
   confirmStrong: {
     fontWeight: '700',
+  },
+  fieldLabel: {
+    fontSize: 12,
+    color: colors.warmGray,
+    marginBottom: 4,
   },
   confirmButtonRow: {
     flexDirection: 'row',

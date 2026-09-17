@@ -4,7 +4,7 @@ const DEFAULT_TEXT = '다음주 화요일 저녁 7시에 강남역에서 팀 회
 
 // 별명 학습/추측 동작을 테스트하기 위한 샘플 데이터. "종숲"은 등록돼있고 "잠숲" 같은 새 패턴이 추측되는지 확인용.
 const SAMPLE_KNOWN_ALIASES: KnownPlaceAlias[] = [
-  { alias: '종숲', name: '서울숲클라이밍 종로점', address: null },
+  { alias: '종숲', name: '서울숲클라이밍 종로점', address: null, category: '클라이밍' },
 ]
 
 async function main() {

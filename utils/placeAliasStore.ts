@@ -15,13 +15,19 @@ export async function getPlaceAliases(): Promise<PlaceAlias[]> {
   }
 }
 
-export async function savePlaceAlias(input: { alias: string; name: string; address: string | null }): Promise<PlaceAlias> {
+export async function savePlaceAlias(input: {
+  alias: string
+  name: string
+  address: string | null
+  category: string | null
+}): Promise<PlaceAlias> {
   const existing = await getPlaceAliases()
   const newAlias: PlaceAlias = {
     userId: LOCAL_USER_ID,
     alias: input.alias,
     name: input.name,
     address: input.address,
+    category: input.category,
     createdAt: new Date().toISOString(),
   }
   // 같은 alias가 이미 있으면 덮어쓰기 (최신 정보 유지)

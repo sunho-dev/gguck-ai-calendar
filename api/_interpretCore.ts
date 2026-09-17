@@ -19,6 +19,7 @@ export interface KnownPlaceAlias {
   alias: string // "종숲"
   name: string // "서울숲클라이밍 종로점"
   address: string | null
+  category: string | null // "클라이밍". 등록되어 있으면 이 별명이 나올 때 AI가 자동으로 이 카테고리를 쓴다
 }
 
 export class InterpretRefusedError extends Error {}
@@ -79,12 +80,14 @@ function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): str
   ]
 
   if (knownAliases.length > 0) {
-    lines.push('1) 아래는 이 사용자가 이전에 등록해둔 개인 장소 별명 목록이다. 텍스트에 이 별명이 그대로(정확히 일치) 나오면, place를 해당 장소 정보로 채우고 confidence는 낮추지 말고 ambiguousFields에도 넣지 마라. placeAliasCandidate는 null로 둔다.')
+    lines.push('1) 아래는 이 사용자가 이전에 등록해둔 개인 장소 별명 목록이다. 텍스트에 이 별명이 그대로(정확히 일치) 나오면, place를 해당 장소 정보로 채워라. 이 별명에 카테고리가 등록되어 있으면 event의 category도 반드시 그 카테고리 값으로 채워라(네가 따로 추측한 다른 카테고리로 바꾸지 말 것). 이 경우 place도 category도 confidence를 낮추지 말고 ambiguousFields에도 넣지 마라. placeAliasCandidate는 null로 둔다.')
     lines.push(
-      knownAliases.map((a) => `  - "${a.alias}" = ${a.name}${a.address ? ` (${a.address})` : ''}`).join('\n'),
+      knownAliases
+        .map((a) => `  - "${a.alias}" = ${a.name}${a.address ? ` (${a.address})` : ''}${a.category ? `, 카테고리: ${a.category}` : ''}`)
+        .join('\n'),
     )
     lines.push(
-      '2) 텍스트의 장소 표현이 별명 목록에 정확히는 없지만, 목록에 있는 별명들과 비슷한 작명 패턴(예: 지역 앞글자 + 공통 단어 조합)으로 만들어진 것처럼 보이면, 그 패턴을 참고해 어떤 장소일지 조심스럽게 추측하여 place를 채워라. 이 경우 반드시 ambiguousFields에 "place"를 넣고 confidence를 낮추며, placeAliasCandidate에는 텍스트에 쓰인 원문 그대로(예: "잠숲")를 넣어라 — 사용자에게 맞는지 확인받기 위함이다.',
+      '2) 텍스트의 장소 표현이 별명 목록에 정확히는 없지만, 목록에 있는 별명들과 비슷한 작명 패턴(예: 지역 앞글자 + 공통 단어 조합)으로 만들어진 것처럼 보이면, 그 패턴을 참고해 어떤 장소일지 조심스럽게 추측하여 place를 채워라. 패턴이 유사한 기존 별명에 카테고리가 있으면 category도 그 값으로 채워라. 이 경우 반드시 ambiguousFields에 "place"와 "category"를 넣고 confidence를 낮추며, placeAliasCandidate에는 텍스트에 쓰인 원문 그대로(예: "잠숲")를 넣어라 — 사용자에게 맞는지 확인받기 위함이다.',
     )
     lines.push(
       '3) 별명 목록과 무관하고 패턴 추측도 불가능하면 아래 3번 규칙을 따르라.',

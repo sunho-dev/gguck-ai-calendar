@@ -59,6 +59,7 @@ export interface PlaceAlias {
   alias: string // 사용자가 쓰는 원문 표현, 예: "종숲"
   name: string // 실제 장소명, 예: "서울숲클라이밍 종로점"
   address: string | null
+  category: string | null // 예: "클라이밍". 함께 등록해두면 다음부터 AI가 이 별명이 나왔을 때 자동으로 이 카테고리를 쓴다
   createdAt: ISODateTime
 }
 
