@@ -101,9 +101,9 @@ function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): str
   return lines.join('\n')
 }
 
-// gemini-2.5-flash는 2026-10-16 단종 예정이며 일부 계정에서 이미 404로 막혀있어
-// 공식 후속 모델인 gemini-3.5-flash(무료 티어)로 사용. 더 최신 Flash 모델이 나오면 이 값만 바꾸면 됨.
-const MODEL = 'gemini-3.5-flash'
+// gemini-2.5-flash는 신규 사용자에게 더 이상 제공되지 않음(404).
+// Google API가 실제 에러 메시지로 직접 안내한 후속 모델(gemini-3.6-flash, 무료 티어)로 사용.
+const MODEL = 'gemini-3.6-flash'
 
 export async function interpretEventText(
   text: string,
