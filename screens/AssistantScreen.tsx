@@ -4,6 +4,9 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { colors } from '../constants/colors';
 import { interpretEvent, type InterpretedEvent } from '../utils/interpretEvent';
 import { savePlaceAlias } from '../utils/placeAliasStore';
+import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
+import { generateEventId } from '../utils/quickEntry';
+import type { Event } from '../types/schema';
 
 type PlaceStep =
   | { kind: 'none' }
@@ -26,6 +29,7 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
   const [manualAddress, setManualAddress] = useState('');
   const [categoryInput, setCategoryInput] = useState('');
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const [registeredEventId, setRegisteredEventId] = useState<string | null>(null);
 
   const runInterpret = async () => {
     if (!text.trim()) return;
@@ -34,6 +38,7 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
     setResult(null);
     setSavedNotice(null);
     setPlaceStep({ kind: 'none' });
+    setRegisteredEventId(null);
     try {
       const event = await interpretEvent({ text, createdFrom: autoRun ? 'share' : 'paste' });
       setResult(event);
@@ -67,6 +72,35 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
     // 마운트 시 한 번만: 공유로 열렸을 때 자동 실행 + 부모에게 소비했다고 알림
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const registerEvent = () => {
+    if (!result) return;
+    const newEvent: Event = {
+      id: generateEventId(),
+      userId: 'local',
+      title: result.title,
+      category: result.category,
+      startDate: result.startDate,
+      endDate: result.endDate,
+      time: result.time ?? '09:00',
+      durationMin: result.durationMin ?? 60,
+      place: result.place
+        ? { name: result.place.name, address: result.place.address ?? '', lat: 0, lng: 0 }
+        : null,
+      remindMin: result.remindMin ?? 0,
+      bufferMin: result.bufferMin ?? 0,
+      createdFrom: autoRun ? 'share' : 'paste',
+      sharedWith: [],
+    };
+    saveStoredEvents([...(loadStoredEvents() ?? []), newEvent]);
+    setRegisteredEventId(newEvent.id);
+  };
+
+  const undoRegister = () => {
+    if (!registeredEventId) return;
+    saveStoredEvents((loadStoredEvents() ?? []).filter((e) => e.id !== registeredEventId));
+    setRegisteredEventId(null);
+  };
 
   const confirmGuess = async () => {
     if (placeStep.kind !== 'confirmGuess') return;
@@ -153,6 +187,19 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
             장소: {result.place ? `${result.place.name}${result.place.address ? ` (${result.place.address})` : ''}` : '미지정'}
           </Text>
           <Text style={styles.resultConfidence}>확신도: {result.confidence}</Text>
+
+          {registeredEventId ? (
+            <View style={styles.registerRow}>
+              <Text style={styles.registeredText}>✓ 일정에 등록했어요</Text>
+              <Pressable onPress={undoRegister}>
+                <Text style={styles.undoText}>되돌리기</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable style={styles.registerButton} onPress={registerEvent}>
+              <Text style={styles.registerButtonText}>이 일정 등록하기</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -290,6 +337,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.warmGray,
     marginTop: 4,
+  },
+  registerButton: {
+    backgroundColor: colors.terracotta,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  registerButtonText: {
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  registerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  registeredText: {
+    color: colors.terracotta,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  undoText: {
+    color: colors.warmGray,
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   confirmCard: {
     backgroundColor: colors.lightBeige,
