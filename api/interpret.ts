@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { ApiError } from '@google/genai'
 import { interpretEventText, InterpretRefusedError, type InterpretedEvent, type KnownPlaceAlias } from './_interpretCore'
 
 export type { InterpretedEvent, KnownPlaceAlias }
@@ -53,8 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
     console.error('[api/interpret] Gemini API error:', err)
-    // TODO: 디버깅용 임시 상세 에러 노출. 원인 파악 후 제거할 것.
-    const debugMessage = err instanceof Error ? err.message : JSON.stringify(err)
-    res.status(502).json({ error: `AI 해석 중 오류가 발생했습니다. [DEBUG] ${debugMessage}` } satisfies InterpretErrorBody)
+    if (err instanceof ApiError && err.status === 503) {
+      res.status(503).json({ error: 'AI 서버가 혼잡합니다. 잠시 후 다시 시도해주세요.' } satisfies InterpretErrorBody)
+      return
+    }
+    res.status(502).json({ error: 'AI 해석 중 오류가 발생했습니다.' } satisfies InterpretErrorBody)
   }
 }
