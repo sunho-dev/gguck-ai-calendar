@@ -1,7 +1,5 @@
 import type { Event } from '../types/schema'
-
-// 지금은 익명 단일 사용자만 지원한다 (다른 곳에서도 userId: 'local'을 그대로 쓰는 것과 동일).
-const USER_ID = 'local'
+import { getAnonUserId } from './anonUserId'
 
 export interface GoogleSyncStatus {
   connected: boolean
@@ -10,7 +8,7 @@ export interface GoogleSyncStatus {
 
 export async function getGoogleSyncStatus(): Promise<GoogleSyncStatus> {
   try {
-    const res = await fetch(`/api/auth/google-status?userId=${USER_ID}`)
+    const res = await fetch(`/api/auth/google-status?userId=${getAnonUserId()}`)
     if (!res.ok) return { connected: false, email: null }
     return (await res.json()) as GoogleSyncStatus
   } catch {
@@ -20,7 +18,7 @@ export async function getGoogleSyncStatus(): Promise<GoogleSyncStatus> {
 
 export function startGoogleConnect(): void {
   if (typeof window !== 'undefined') {
-    window.location.href = `/api/auth/google-start?userId=${USER_ID}`
+    window.location.href = `/api/auth/google-start?userId=${getAnonUserId()}`
   }
 }
 
@@ -35,7 +33,7 @@ export async function syncEventUpdate(event: Event): Promise<string | null> {
 
 export async function syncEventDelete(event: Event): Promise<void> {
   if (!event.googleEventId) return
-  const response=await fetch('/api/calendar/sync-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:USER_ID,action:'delete',googleEventId:event.googleEventId})});
+  const response=await fetch('/api/calendar/sync-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:getAnonUserId(),action:'delete',googleEventId:event.googleEventId})});
   if(!response.ok)throw new Error('Google 일정 삭제에 실패했어요. 로컬 일정은 유지됩니다.');
   const result=await response.json();if(!result.connected)throw new Error('Google 연결 후 다시 취소해 주세요.');
 }
@@ -63,7 +61,7 @@ async function postSync(payload: SyncPayload): Promise<string | null> {
     const res = await fetch('/api/calendar/sync-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: USER_ID, ...payload }),
+      body: JSON.stringify({ userId: getAnonUserId(), ...payload }),
     })
     if (!res.ok) return null
     const body = (await res.json()) as { connected: boolean; googleEventId?: string | null }
