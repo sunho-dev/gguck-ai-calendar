@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors } from '../constants/colors';
@@ -10,8 +10,14 @@ type PlaceStep =
   | { kind: 'confirmGuess'; aliasText: string; guessedName: string; guessedAddress: string | null }
   | { kind: 'manualInput'; aliasText: string };
 
-export function AssistantScreen() {
-  const [text, setText] = useState('');
+interface AssistantScreenProps {
+  initialText?: string;
+  autoRun?: boolean;
+  onInitialTextConsumed?: () => void;
+}
+
+export function AssistantScreen({ initialText = '', autoRun = false, onInitialTextConsumed }: AssistantScreenProps) {
+  const [text, setText] = useState(initialText);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<InterpretedEvent | null>(null);
@@ -29,7 +35,7 @@ export function AssistantScreen() {
     setSavedNotice(null);
     setPlaceStep({ kind: 'none' });
     try {
-      const event = await interpretEvent({ text, createdFrom: 'paste' });
+      const event = await interpretEvent({ text, createdFrom: autoRun ? 'share' : 'paste' });
       setResult(event);
       setCategoryInput(event.category); // 확인/입력 화면에서 바로 고칠 수 있게 미리 채워둠
 
@@ -52,6 +58,15 @@ export function AssistantScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (autoRun && initialText.trim()) {
+      runInterpret();
+    }
+    onInitialTextConsumed?.();
+    // 마운트 시 한 번만: 공유로 열렸을 때 자동 실행 + 부모에게 소비했다고 알림
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const confirmGuess = async () => {
     if (placeStep.kind !== 'confirmGuess') return;
