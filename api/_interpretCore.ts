@@ -100,7 +100,11 @@ function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): str
     '--- 예시 ---',
     '입력: "내일 5시 종숲 ㄱ" (별명 목록이 비어있는 경우)',
     '올바른 출력의 place, placeAliasCandidate 부분: place: {"name": "종숲", "address": null}, placeAliasCandidate: "종숲", ambiguousFields에 "place" 포함',
-    '(틀린 예: place와 placeAliasCandidate를 둘 다 null로 남기는 것 — "종숲"은 시간 표현도 행동 유도 표현도 아니므로 반드시 장소 후보로 잡아야 한다)',
+    '(틀린 예 1: place와 placeAliasCandidate를 둘 다 null로 남기는 것 — "종숲"은 시간 표현도 행동 유도 표현도 아니므로 반드시 장소 후보로 잡아야 한다)',
+    '(틀린 예 2: place.name에 "홍대", "강남" 등 텍스트에 없는 다른 지명을 채우는 것 — 절대 금지. place.name은 반드시 텍스트에 실제로 적힌 글자 그대로여야 하며, 네가 아는 유명한 지명으로 바꿔치기하면 안 된다)',
+    '',
+    '--- 절대 규칙 ---',
+    'place.name은 항상 텍스트 원문에 실제로 등장하는 단어/구절 그대로여야 한다. 텍스트에 없는 지명이나 상호를 너의 일반 지식으로 지어내서 채우는 것은 명백한 오류다. 어떤 장소인지 모르겠으면 텍스트에 적힌 표현을 그대로 쓰고 ambiguousFields로 표시할 뿐, 절대 다른 실제 지명으로 대체하지 마라.',
   )
 
   return lines.join('\n')
