@@ -1,4 +1,4 @@
-import { FinishReason, GoogleGenAI } from '@google/genai'
+import { FinishReason, GoogleGenAI, Type, type Schema } from '@google/genai'
 
 export interface InterpretedEvent {
   title: string
@@ -23,34 +23,31 @@ export interface KnownPlaceAlias {
 
 export class InterpretRefusedError extends Error {}
 
-const EVENT_SCHEMA = {
-  type: 'object',
+// Gemini 자체 Schema 포맷(OpenAPI 서브셋) 사용. responseJsonSchema(표준 JSON Schema)는
+// 이 SDK/모델 조합에서 404를 유발해서, 정식 지원 필드인 responseSchema로 전환.
+const EVENT_SCHEMA: Schema = {
+  type: Type.OBJECT,
   properties: {
-    title: { type: 'string' },
-    category: { type: 'string' },
-    startDate: { type: 'string', format: 'date' },
-    endDate: { type: 'string', format: 'date' },
-    time: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    durationMin: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
+    title: { type: Type.STRING },
+    category: { type: Type.STRING },
+    startDate: { type: Type.STRING, format: 'date' },
+    endDate: { type: Type.STRING, format: 'date' },
+    time: { type: Type.STRING, nullable: true },
+    durationMin: { type: Type.INTEGER, nullable: true },
     place: {
-      anyOf: [
-        {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-            address: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-          },
-          required: ['name', 'address'],
-          additionalProperties: false,
-        },
-        { type: 'null' },
-      ],
+      type: Type.OBJECT,
+      nullable: true,
+      properties: {
+        name: { type: Type.STRING },
+        address: { type: Type.STRING, nullable: true },
+      },
+      required: ['name', 'address'],
     },
-    placeAliasCandidate: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-    remindMin: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
-    bufferMin: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
-    confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-    ambiguousFields: { type: 'array', items: { type: 'string' } },
+    placeAliasCandidate: { type: Type.STRING, nullable: true },
+    remindMin: { type: Type.INTEGER, nullable: true },
+    bufferMin: { type: Type.INTEGER, nullable: true },
+    confidence: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
+    ambiguousFields: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
   required: [
     'title',
@@ -66,8 +63,7 @@ const EVENT_SCHEMA = {
     'confidence',
     'ambiguousFields',
   ],
-  additionalProperties: false,
-} as const
+}
 
 function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): string {
   const lines = [
@@ -121,7 +117,7 @@ export async function interpretEventText(
     config: {
       systemInstruction: buildSystemPrompt(nowIso, knownAliases),
       responseMimeType: 'application/json',
-      responseJsonSchema: EVENT_SCHEMA,
+      responseSchema: EVENT_SCHEMA,
     },
   })
 
