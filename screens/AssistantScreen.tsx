@@ -7,6 +7,7 @@ import { savePlaceAlias } from '../utils/placeAliasStore';
 import { getCategories, saveCategory } from '../utils/categoryStore';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 import { generateEventId } from '../utils/quickEntry';
+import { check, type CheckResult } from '../utils/ruleCheck';
 import type { Category, Event } from '../types/schema';
 
 type PlaceStep =
@@ -33,6 +34,7 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
   const [registeredEventId, setRegisteredEventId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [pendingNewCategory, setPendingNewCategory] = useState<string | null>(null);
+  const [blockResult, setBlockResult] = useState<CheckResult | null>(null);
 
   useEffect(() => {
     getCategories().then(setCategories);
@@ -50,6 +52,7 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
     setPlaceStep({ kind: 'none' });
     setRegisteredEventId(null);
     setPendingNewCategory(null);
+    setBlockResult(null);
     try {
       const event = await interpretEvent({ text, createdFrom: autoRun ? 'share' : 'paste' });
       setResult(event);
@@ -91,9 +94,9 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const registerEvent = () => {
-    if (!result) return;
-    const newEvent: Event = {
+  const buildEvent = (): Event | null => {
+    if (!result) return null;
+    return {
       id: generateEventId(),
       userId: 'local',
       title: result.title,
@@ -110,8 +113,31 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
       createdFrom: autoRun ? 'share' : 'paste',
       sharedWith: [],
     };
+  };
+
+  const saveEvent = (newEvent: Event) => {
     saveStoredEvents([...(loadStoredEvents() ?? []), newEvent]);
     setRegisteredEventId(newEvent.id);
+    setBlockResult(null);
+  };
+
+  const registerEvent = () => {
+    const newEvent = buildEvent();
+    if (!newEvent) return;
+    // 규칙 검사(check())는 아직 스텁 — 항상 통과. 창민이 실제 규칙 엔진을 완성하면
+    // utils/ruleCheck.ts의 check() 본문만 교체하면 이 호출부는 그대로 작동한다.
+    const outcome = check(newEvent, loadStoredEvents() ?? [], []);
+    if (outcome.result === 'block') {
+      setBlockResult(outcome);
+      return;
+    }
+    saveEvent(newEvent);
+  };
+
+  const forceRegisterDespiteBlock = () => {
+    const newEvent = buildEvent();
+    if (!newEvent) return;
+    saveEvent(newEvent);
   };
 
   const undoRegister = () => {
@@ -265,6 +291,13 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
               <Text style={styles.registeredText}>✓ 일정에 등록했어요</Text>
               <Pressable onPress={undoRegister}>
                 <Text style={styles.undoText}>되돌리기</Text>
+              </Pressable>
+            </View>
+          ) : blockResult ? (
+            <View style={styles.blockBox}>
+              <Text style={styles.blockText}>🚫 {blockResult.reason ?? '규칙에 걸려서 등록이 막혔어요.'}</Text>
+              <Pressable style={styles.blockOverrideButton} onPress={forceRegisterDespiteBlock}>
+                <Text style={styles.undoText}>그래도 등록하기</Text>
               </Pressable>
             </View>
           ) : (
@@ -481,6 +514,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 12,
+  },
+  blockBox: {
+    backgroundColor: '#F6DEDC',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+  },
+  blockText: {
+    color: '#A13A3A',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  blockOverrideButton: {
+    alignSelf: 'flex-start',
   },
   registeredText: {
     color: colors.terracotta,

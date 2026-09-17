@@ -22,6 +22,7 @@ import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/goog
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 import { getCategories } from '../utils/categoryStore';
+import { check } from '../utils/ruleCheck';
 import { downloadIcsForEvent } from '../utils/ics';
 
 interface ResolvedEntry {
@@ -210,6 +211,12 @@ export function CalendarScreen() {
         sharedWith: [],
         ...resolved,
       };
+      // 규칙 검사 스텁(항상 통과) — 창민의 진짜 check() 완성되면 utils/ruleCheck.ts만 교체하면 됨
+      const outcome = check(newEvent, events, []);
+      if (outcome.result === 'block') {
+        setErrorMessage(outcome.reason ?? '규칙에 걸려서 등록할 수 없어요.');
+        return;
+      }
       setEvents((prev) => [...prev, newEvent]);
       if (googleStatus.connected) {
         runGoogleSync(() => syncEventCreate(newEvent)).then((googleEventId) => {
