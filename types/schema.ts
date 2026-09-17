@@ -11,11 +11,12 @@ export interface Event {
   endDate: ISODate // 기간 일정 지원 (단일 일정이면 startDate와 동일)
   time: ISOTime
   durationMin: number
-  place: { name: string; address: string; lat: number; lng: number } | null // 장소 없는 일정도 있어서 nullable
+  place: { name: string; address: string | null; lat: number; lng: number } | null // 장소 없는 일정도, 주소 모르는 장소도 있음
   remindMin: number
   bufferMin: number
   createdFrom: 'share' | 'paste' | 'text' | 'voice'
   sharedWith: string[]
+  googleEventId?: string // 구글 캘린더 자동 동기화로 만들어진 이벤트일 때만 존재
 }
 
 /**
