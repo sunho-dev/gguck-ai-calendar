@@ -9,7 +9,6 @@ interface InterpretRequestBody {
   now?: string // ISODateTime, 상대 날짜("내일", "다음주 화요일") 해석 기준 시각
   createdFrom?: 'share' | 'paste' | 'text' | 'voice'
   knownAliases?: KnownPlaceAlias[] // 사용자가 이전에 등록해둔 개인 장소 별명 목록
-  knownCategories?: string[] // 사용자가 이전에 만들어둔 카테고리 이름 목록
 }
 
 interface InterpretResponseBody {
@@ -45,10 +44,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const nowIso = body?.now ?? new Date().toISOString()
   const knownAliases = Array.isArray(body?.knownAliases) ? body.knownAliases : []
-  const knownCategories = Array.isArray(body?.knownCategories) ? body.knownCategories : []
 
   try {
-    const event = await interpretEventText(text, nowIso, apiKey, knownAliases, knownCategories)
+    const event = await interpretEventText(text, nowIso, apiKey, knownAliases)
     res.status(200).json({ event } satisfies InterpretResponseBody)
   } catch (err) {
     if (err instanceof InterpretRefusedError) {

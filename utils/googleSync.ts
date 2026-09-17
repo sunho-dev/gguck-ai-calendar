@@ -35,7 +35,9 @@ export async function syncEventUpdate(event: Event): Promise<string | null> {
 
 export async function syncEventDelete(event: Event): Promise<void> {
   if (!event.googleEventId) return
-  await postSync({ action: 'delete', googleEventId: event.googleEventId })
+  const response=await fetch('/api/calendar/sync-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:USER_ID,action:'delete',googleEventId:event.googleEventId})});
+  if(!response.ok)throw new Error('Google 일정 삭제에 실패했어요. 로컬 일정은 유지됩니다.');
+  const result=await response.json();if(!result.connected)throw new Error('Google 연결 후 다시 취소해 주세요.');
 }
 
 function toPayload(event: Event) {
@@ -45,8 +47,8 @@ function toPayload(event: Event) {
     endDate: event.endDate,
     time: event.time,
     durationMin: event.durationMin,
-    place: event.place ? { name: event.place.name, address: event.place.address } : null,
     remindMin: event.remindMin,
+    place: event.place ? { name: event.place.name, address: event.place.address } : null,
   }
 }
 

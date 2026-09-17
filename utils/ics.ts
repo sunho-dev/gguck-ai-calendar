@@ -26,16 +26,6 @@ export function buildIcsContent(event: Event): string {
     lines.push(`LOCATION:${escapeIcsText(location)}`)
   }
 
-  if (event.remindMin > 0) {
-    lines.push(
-      'BEGIN:VALARM',
-      'ACTION:DISPLAY',
-      `DESCRIPTION:${escapeIcsText(event.title)}`,
-      `TRIGGER:-PT${event.remindMin}M`,
-      'END:VALARM',
-    )
-  }
-
   lines.push('END:VEVENT', 'END:VCALENDAR')
 
   return lines.join('\r\n')

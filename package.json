@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.15",
@@ -30,7 +30,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test:interpret": "tsx scripts/test-interpret.ts"
+    "test:interpret": "tsx scripts/test-interpret.ts",
+    "test": "node --test tests/scheduler/*.test.js && node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "expo export -p web"
   },
   "private": true
 }

@@ -20,7 +20,8 @@ export function saveStoredEvents(events: Event[]): void {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+    window.dispatchEvent(new globalThis.Event('gguck-events-changed'))
   } catch {
-    // 저장 실패(프라이빗 모드 등)해도 앱 동작에는 지장 없게 조용히 무시한다.
+    throw new Error('일정을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.');
   }
 }
