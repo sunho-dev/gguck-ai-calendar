@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {check} from '../utils/scheduler';
 import {toSchedule,loadRules} from '../utils/scheduleAdapter';
@@ -7,6 +7,7 @@ import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
 import koreanHolidays from '../data/koreanHolidays.json';
 import type { Event } from '../types/schema';
+import { buildGoogleCalendarLink } from '../utils/googleCalendarLink';
 import {
   addDays,
   addMonths,
@@ -141,8 +142,11 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   const googleStatus = useGoogleSyncStatus();
   const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? []);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [viewedMonth, setViewedMonth] = useState(() => startOfMonth(today));
+  const [isEditingHeaderDate, setIsEditingHeaderDate] = useState(false);
+  const [yearInput, setYearInput] = useState('');
+  const [monthInput, setMonthInput] = useState('');
   const [inputText, setInputText] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -164,10 +168,42 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
     .filter((event) => !event.cancelledAt && event.startDate <= selectedDate && event.endDate >= selectedDate)
     .sort((a, b) => a.time.localeCompare(b.time));
 
-  const switchToWeek = () => setViewMode('week');
+  const switchToWeek = () => {
+    setViewMode('week');
+    setIsEditingHeaderDate(false);
+  };
   const switchToMonth = () => {
     setViewMode('month');
     setViewedMonth(startOfMonth(selectedDate));
+  };
+
+  const openHeaderDateEditor = () => {
+    setViewMode('month');
+    setYearInput(viewedMonth.slice(0, 4));
+    setMonthInput(String(Number(viewedMonth.slice(5, 7))));
+    setIsEditingHeaderDate(true);
+  };
+
+  const handleYearInputChange = (text: string) => {
+    const digits = text.replace(/[^0-9]/g, '').slice(0, 4);
+    setYearInput(digits);
+    if (digits.length === 4) {
+      const year = Number(digits);
+      if (year >= 1970 && year <= 2100) {
+        setViewedMonth(`${digits}-${viewedMonth.slice(5, 7)}-01`);
+      }
+    }
+  };
+
+  const handleMonthInputChange = (text: string) => {
+    const digits = text.replace(/[^0-9]/g, '').slice(0, 2);
+    setMonthInput(digits);
+    if (digits.length > 0) {
+      const month = Number(digits);
+      if (month >= 1 && month <= 12) {
+        setViewedMonth(`${viewedMonth.slice(0, 4)}-${String(month).padStart(2, '0')}-01`);
+      }
+    }
   };
 
   const resetEntry = () => {
@@ -256,9 +292,39 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   return (
     <View style={styles.page}>
       <View style={styles.header}>
-        <Text style={styles.monthLabel}>
-          {formatMonthLabel(viewMode === 'month' ? viewedMonth : selectedDate)}
-        </Text>
+        {isEditingHeaderDate ? (
+          <View style={styles.headerDateEditor}>
+            <TextInput
+              value={yearInput}
+              onChangeText={handleYearInputChange}
+              keyboardType="number-pad"
+              maxLength={4}
+              placeholder="연도"
+              placeholderTextColor={colors.warmGray}
+              style={styles.yearInput}
+            />
+            <Text style={styles.headerDateEditorUnit}>년</Text>
+            <TextInput
+              value={monthInput}
+              onChangeText={handleMonthInputChange}
+              keyboardType="number-pad"
+              maxLength={2}
+              placeholder="월"
+              placeholderTextColor={colors.warmGray}
+              style={styles.monthInput}
+            />
+            <Text style={styles.headerDateEditorUnit}>월</Text>
+            <Pressable onPress={() => setIsEditingHeaderDate(false)} style={styles.headerDateDoneButton}>
+              <Text style={styles.headerDateDoneButtonText}>완료</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable onPress={openHeaderDateEditor}>
+            <Text style={styles.monthLabel}>
+              {formatMonthLabel(viewMode === 'month' ? viewedMonth : selectedDate)}
+            </Text>
+          </Pressable>
+        )}
         <View style={styles.viewToggle}>
           <Pressable
             onPress={switchToWeek}
@@ -358,18 +424,9 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
               );
               return (
                 <Pressable key={date} onPress={() => setSelectedDate(date)} style={styles.monthCell}>
-                  {selected ? (
-                    <GlossyBox
-                      colors={['#d49478', '#b56d52']}
-                      shadowColor="#b17644"
-                      borderRadius={14}
-                      style={styles.monthCellCircle}
-                    >
-                      {cellText}
-                    </GlossyBox>
-                  ) : (
-                    <View style={styles.monthCellCircle}>{cellText}</View>
-                  )}
+                  <View style={[styles.monthCellCircle, selected && styles.monthCellCircleSelected]}>
+                    {cellText}
+                  </View>
                   {hasEventsOn(date) ? <View style={styles.monthCellDot} /> : null}
                 </Pressable>
               );
@@ -435,6 +492,13 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
             </View>
             <View style={styles.eventCardActions}>
               <View style={styles.secondaryButtonRow}>
+                <Pressable
+                  testID={`gcal-${item.id}`}
+                  onPress={() => Linking.openURL(buildGoogleCalendarLink(item))}
+                  style={styles.editButton}
+                >
+                  <Text style={styles.editButtonText}>구글</Text>
+                </Pressable>
                 <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
                   <Text style={styles.editButtonText}>수정</Text>
                 </Pressable>
@@ -471,6 +535,51 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: colors.textDark,
+  },
+  headerDateEditor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+  },
+  yearInput: {
+    backgroundColor: colors.lightBeige,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textDark,
+    width: 64,
+    textAlign: 'center',
+  },
+  headerDateEditorUnit: {
+    fontSize: 14,
+    color: colors.textDark,
+    marginRight: 2,
+  },
+  monthInput: {
+    backgroundColor: colors.lightBeige,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textDark,
+    width: 48,
+    textAlign: 'center',
+  },
+  headerDateDoneButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: colors.terracotta,
+  },
+  headerDateDoneButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.white,
   },
   viewToggle: {
     flexDirection: 'row',
@@ -567,6 +676,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  monthCellCircleSelected: {
+    backgroundColor: colors.terracotta,
+    borderWidth: 2,
+    borderColor: '#8a4a36',
   },
   monthCellText: {
     fontSize: 13,
