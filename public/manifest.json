@@ -14,7 +14,7 @@
     { "src": "/icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
   ],
   "share_target": {
-    "action": "/share-target",
+    "action": "/share-target.html",
     "method": "GET",
     "enctype": "application/x-www-form-urlencoded",
     "params": {
