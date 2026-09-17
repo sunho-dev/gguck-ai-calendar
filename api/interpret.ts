@@ -53,6 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
     console.error('[api/interpret] Gemini API error:', err)
-    res.status(502).json({ error: 'AI 해석 중 오류가 발생했습니다.' } satisfies InterpretErrorBody)
+    // TODO: 디버깅용 임시 상세 에러 노출. 원인 파악 후 제거할 것.
+    const debugMessage = err instanceof Error ? err.message : JSON.stringify(err)
+    res.status(502).json({ error: `AI 해석 중 오류가 발생했습니다. [DEBUG] ${debugMessage}` } satisfies InterpretErrorBody)
   }
 }
