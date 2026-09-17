@@ -58,6 +58,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(503).json({ error: 'AI 서버가 혼잡합니다. 잠시 후 다시 시도해주세요.' } satisfies InterpretErrorBody)
       return
     }
-    res.status(502).json({ error: `AI 해석 중 오류가 발생했습니다. [DEBUG] ${err instanceof Error ? err.message : JSON.stringify(err)}` } satisfies InterpretErrorBody)
+    if (err instanceof ApiError && err.status === 429) {
+      res.status(429).json({ error: '오늘의 AI 무료 사용량을 다 썼어요. 내일 다시 시도해주세요.' } satisfies InterpretErrorBody)
+      return
+    }
+    res.status(502).json({ error: 'AI 해석 중 오류가 발생했습니다.' } satisfies InterpretErrorBody)
   }
 }
