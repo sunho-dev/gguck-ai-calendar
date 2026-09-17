@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../constants/colors';
+import { startGoogleConnect } from '../utils/googleSync';
+import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { AppLogo } from './AppLogo';
 import { GlossyBox } from './GlossyBox';
 
@@ -22,52 +24,73 @@ export function Sidebar({
   onSelect: (key: NavKey) => void;
   compact: boolean;
 }) {
+  const googleStatus = useGoogleSyncStatus();
+
   return (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
-      <View style={[styles.brand, compact && styles.brandCompact]}>
-        <AppLogo size={34} />
-        {!compact && (
-          <View>
-            <Text style={styles.brandText}>kkuk</Text>
-            <Text style={styles.brandSubtitle}>가볍게 말하고, 꾹.</Text>
-          </View>
-        )}
+      <View>
+        <View style={[styles.brand, compact && styles.brandCompact]}>
+          <AppLogo size={34} />
+          {!compact && (
+            <View>
+              <Text style={styles.brandText}>kkuk</Text>
+              <Text style={styles.brandSubtitle}>가볍게 말하고, 꾹.</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.nav}>
+          {NAV_ITEMS.map((item) => {
+            const selected = item.key === active;
+            const content = (
+              <>
+                <Text style={[styles.navIcon, selected && styles.navTextActive]}>{item.icon}</Text>
+                {!compact && (
+                  <Text style={[styles.navLabel, selected && styles.navTextActive]}>{item.label}</Text>
+                )}
+              </>
+            );
+            return (
+              <Pressable key={item.key} onPress={() => onSelect(item.key)}>
+                {selected ? (
+                  <GlossyBox
+                    colors={['#cf8f71', '#b56d52']}
+                    shadowColor="#ac7041"
+                    borderRadius={12}
+                    contentStyle={[
+                      styles.navItemContent,
+                      compact && styles.navItemContentCompact,
+                    ]}
+                  >
+                    {content}
+                  </GlossyBox>
+                ) : (
+                  <View style={[styles.navItemContent, compact && styles.navItemContentCompact]}>
+                    {content}
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      <View style={styles.nav}>
-        {NAV_ITEMS.map((item) => {
-          const selected = item.key === active;
-          const content = (
-            <>
-              <Text style={[styles.navIcon, selected && styles.navTextActive]}>{item.icon}</Text>
-              {!compact && (
-                <Text style={[styles.navLabel, selected && styles.navTextActive]}>{item.label}</Text>
-              )}
-            </>
-          );
-          return (
-            <Pressable key={item.key} onPress={() => onSelect(item.key)}>
-              {selected ? (
-                <GlossyBox
-                  colors={['#cf8f71', '#b56d52']}
-                  shadowColor="#ac7041"
-                  borderRadius={12}
-                  contentStyle={[
-                    styles.navItemContent,
-                    compact && styles.navItemContentCompact,
-                  ]}
-                >
-                  {content}
-                </GlossyBox>
-              ) : (
-                <View style={[styles.navItemContent, compact && styles.navItemContentCompact]}>
-                  {content}
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
+      <Pressable
+        onPress={googleStatus.connected ? undefined : startGoogleConnect}
+        style={[styles.googleRow, compact && styles.googleRowCompact]}
+      >
+        <View style={styles.googleIcon}>
+          <Text style={styles.googleIconText}>G</Text>
+        </View>
+        {!compact && (
+          <View style={styles.googleTextGroup}>
+            <Text style={styles.googleTitle}>Google Calendar</Text>
+            <Text style={styles.googleSubtitle}>
+              {googleStatus.connected ? `연동됨 · ${googleStatus.email}` : '미연결 · 눌러서 연동'}
+            </Text>
+          </View>
+        )}
+      </Pressable>
     </View>
   );
 }
@@ -78,6 +101,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lightBeige,
     paddingVertical: 24,
     paddingHorizontal: 14,
+    justifyContent: 'space-between',
   },
   sidebarCompact: {
     width: 64,
@@ -131,5 +155,42 @@ const styles = StyleSheet.create({
   },
   navTextActive: {
     color: colors.white,
+  },
+  googleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+  },
+  googleRowCompact: {
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+  },
+  googleIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleIconText: {
+    fontWeight: '800',
+    fontSize: 13,
+    color: colors.textDark,
+  },
+  googleTextGroup: {
+    flex: 1,
+  },
+  googleTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textDark,
+  },
+  googleSubtitle: {
+    fontSize: 10,
+    color: colors.warmGray,
+    marginTop: 1,
   },
 });
