@@ -23,6 +23,7 @@ import { generateEventId, parseQuickEntry } from '../utils/quickEntry';
 import { interpretEvent } from '../utils/interpretEvent';
 import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
+import { mergeGoogleEvents, pullGoogleEvents } from '../utils/googlePull';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 
 interface ResolvedEntry {
@@ -156,6 +157,27 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   useEffect(() => {
     saveStoredEvents(events);
   }, [events]);
+
+  // 구글 캘린더에서 만들거나 고친 일정을 꾹에도 반영한다. 실시간 push 대신 폴링이라
+  // 즉시는 아니고 최대 POLL_INTERVAL_MS 정도 지연될 수 있다.
+  useEffect(() => {
+    if (!googleStatus.connected) return;
+    const POLL_INTERVAL_MS = 60_000;
+
+    let cancelled = false;
+    const pull = async () => {
+      const drafts = await pullGoogleEvents();
+      if (cancelled || drafts.length === 0) return;
+      setEvents((prev) => mergeGoogleEvents(prev, drafts));
+    };
+
+    pull();
+    const timer = setInterval(pull, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [googleStatus.connected]);
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i)), [today]);
   const monthGrid = useMemo(() => buildMonthGrid(viewedMonth), [viewedMonth]);

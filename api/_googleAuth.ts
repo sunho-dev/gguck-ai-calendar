@@ -36,6 +36,7 @@ export interface StoredGoogleAccount {
   syncEnabled: boolean
   connectedAt: string
   lastSyncedAt: string | null
+  pullSyncToken?: string // 구글 캘린더 events.list의 증분 동기화 토큰 (폴링용, 없으면 처음부터 전체 조회)
 }
 
 function kvKey(userId: string): string {
