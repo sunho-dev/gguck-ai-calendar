@@ -46,6 +46,7 @@ function toPayload(event: Event) {
     time: event.time,
     durationMin: event.durationMin,
     place: event.place ? { name: event.place.name, address: event.place.address } : null,
+    remindMin: event.remindMin,
   }
 }
 
