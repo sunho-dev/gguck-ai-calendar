@@ -2,9 +2,13 @@
   "name": "gguck",
   "version": "1.0.0",
   "main": "index.ts",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.126.0",
     "@expo/metro-runtime": "~57.0.15",
+    "@google/genai": "^2.22.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@upstash/redis": "^1.38.4",
     "expo": "~57.0.23",
     "expo-linear-gradient": "~57.0.2",
