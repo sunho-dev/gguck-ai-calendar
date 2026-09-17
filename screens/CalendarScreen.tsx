@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import {check} from '../utils/scheduler';
+import {toSchedule,loadRules} from '../utils/scheduleAdapter';
 import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
 import koreanHolidays from '../data/koreanHolidays.json';
-import type { Category, Event } from '../types/schema';
+import type { Event } from '../types/schema';
+import { buildGoogleCalendarLink } from '../utils/googleCalendarLink';
 import {
   addDays,
   addMonths,
@@ -21,10 +24,6 @@ import { interpretEvent } from '../utils/interpretEvent';
 import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
-import { getCategories } from '../utils/categoryStore';
-import { check } from '../utils/ruleCheck';
-import { buildGoogleCalendarLink } from '../utils/googleCalendarLink';
-import { downloadIcsForEvent } from '../utils/ics';
 
 interface ResolvedEntry {
   title: string;
@@ -36,16 +35,17 @@ interface ResolvedEntry {
   bufferMin: number;
 }
 
-// 길선호 팀원의 /api/interpret(Gemini 기반 AI 해석)를 우선 쓰고, 배포되지 않은 환경(로컬 네이티브 등)에서
+// 길선호 팀원의 /api/interpret(Claude 기반 AI 해석)를 우선 쓰고, 배포되지 않은 환경(로컬 네이티브 등)에서
 // 호출이 실패하면 자체 정규식 파서로 대체한다. 날짜는 항상 캘린더에서 선택한 날짜를 그대로 쓴다
 // (텍스트 속 상대 날짜 표현으로 바뀌면 "날짜 선택 후 입력" 흐름과 어긋나서 의도적으로 덮어쓴다).
 async function resolveQuickEntry(text: string): Promise<ResolvedEntry | null> {
   try {
     const interpreted = await interpretEvent({ text, createdFrom: 'text' });
+    if(!interpreted.time || interpreted.ambiguousFields.length || interpreted.placeAliasCandidate)throw new Error('날짜·시간·장소를 명확히 입력해 주세요.');
     return {
       title: interpreted.title,
       category: interpreted.category,
-      time: interpreted.time ?? '09:00',
+      time: interpreted.time!,
       durationMin: interpreted.durationMin ?? 60,
       place: interpreted.place ? { ...interpreted.place, lat: 0, lng: 0 } : null,
       remindMin: interpreted.remindMin ?? 0,
@@ -54,7 +54,7 @@ async function resolveQuickEntry(text: string): Promise<ResolvedEntry | null> {
   } catch (err) {
     console.warn('[quick-add] AI 해석 실패, 기본 파서로 대체합니다:', err);
     const parsed = parseQuickEntry(text);
-    if (!parsed) return null;
+    if (!parsed || (!/오전|오후/.test(text) && Number(parsed.time.slice(0,2))<=12)) return null;
     return {
       title: parsed.title,
       category: 'personal',
@@ -70,13 +70,28 @@ async function resolveQuickEntry(text: string): Promise<ResolvedEntry | null> {
 const HOLIDAYS: Record<string, string> = koreanHolidays;
 const WEEKDAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
 
+const CATEGORY_LABEL: Record<string, string> = {
+  exercise: '운동',
+  work: '업무',
+  personal: '개인',
+  study: '공부',
+  health: '건강',
+};
+
+const CATEGORY_COLOR: Record<string, string> = {
+  exercise: colors.terracotta,
+  work: colors.warmGray,
+  personal: colors.coral,
+  study: colors.lightBeige,
+};
+
 function buildSampleEvents(today: string): Event[] {
   return [
     {
       id: 'sample-1',
       userId: 'local',
       title: '팀 데일리 미팅',
-      category: '업무',
+      category: 'work',
       startDate: today,
       endDate: today,
       time: '10:00',
@@ -91,7 +106,7 @@ function buildSampleEvents(today: string): Event[] {
       id: 'sample-2',
       userId: 'local',
       title: '저녁 러닝',
-      category: '운동',
+      category: 'exercise',
       startDate: today,
       endDate: today,
       time: '19:00',
@@ -106,7 +121,7 @@ function buildSampleEvents(today: string): Event[] {
       id: 'sample-3',
       userId: 'local',
       title: '친구와 저녁 약속',
-      category: '약속',
+      category: 'personal',
       startDate: addDays(today, 1),
       endDate: addDays(today, 1),
       time: '19:30',
@@ -122,23 +137,21 @@ function buildSampleEvents(today: string): Event[] {
 
 type ViewMode = 'week' | 'month';
 
-export function CalendarScreen() {
+export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   const today = useMemo(() => todayISODate(), []);
   const googleStatus = useGoogleSyncStatus();
-  const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? buildSampleEvents(today));
+  const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? []);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [viewedMonth, setViewedMonth] = useState(() => startOfMonth(today));
+  const [isEditingHeaderDate, setIsEditingHeaderDate] = useState(false);
+  const [yearInput, setYearInput] = useState('');
+  const [monthInput, setMonthInput] = useState('');
   const [inputText, setInputText] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
-  const [categories, setCategories] = useState<Category[]>([]);
-
-  useEffect(() => {
-    getCategories().then(setCategories);
-  }, []);
 
   useEffect(() => {
     saveStoredEvents(events);
@@ -148,17 +161,49 @@ export function CalendarScreen() {
   const monthGrid = useMemo(() => buildMonthGrid(viewedMonth), [viewedMonth]);
 
   const hasEventsOn = (date: string) =>
-    events.some((event) => event.startDate <= date && event.endDate >= date);
+    events.some((event) => !event.cancelledAt && event.startDate <= date && event.endDate >= date);
 
   const holidayName = HOLIDAYS[selectedDate];
   const eventsForDay = events
-    .filter((event) => event.startDate <= selectedDate && event.endDate >= selectedDate)
+    .filter((event) => !event.cancelledAt && event.startDate <= selectedDate && event.endDate >= selectedDate)
     .sort((a, b) => a.time.localeCompare(b.time));
 
-  const switchToWeek = () => setViewMode('week');
+  const switchToWeek = () => {
+    setViewMode('week');
+    setIsEditingHeaderDate(false);
+  };
   const switchToMonth = () => {
     setViewMode('month');
     setViewedMonth(startOfMonth(selectedDate));
+  };
+
+  const openHeaderDateEditor = () => {
+    setViewMode('month');
+    setYearInput(viewedMonth.slice(0, 4));
+    setMonthInput(String(Number(viewedMonth.slice(5, 7))));
+    setIsEditingHeaderDate(true);
+  };
+
+  const handleYearInputChange = (text: string) => {
+    const digits = text.replace(/[^0-9]/g, '').slice(0, 4);
+    setYearInput(digits);
+    if (digits.length === 4) {
+      const year = Number(digits);
+      if (year >= 1970 && year <= 2100) {
+        setViewedMonth(`${digits}-${viewedMonth.slice(5, 7)}-01`);
+      }
+    }
+  };
+
+  const handleMonthInputChange = (text: string) => {
+    const digits = text.replace(/[^0-9]/g, '').slice(0, 2);
+    setMonthInput(digits);
+    if (digits.length > 0) {
+      const month = Number(digits);
+      if (month >= 1 && month <= 12) {
+        setViewedMonth(`${viewedMonth.slice(0, 4)}-${String(month).padStart(2, '0')}-01`);
+      }
+    }
   };
 
   const resetEntry = () => {
@@ -177,6 +222,10 @@ export function CalendarScreen() {
   };
 
   const handleSubmit = async () => {
+    if (!editingId) {
+      const dated=/오늘|내일|모레|다음.*주|이번.*주|매주|매일|매월|평일|\d{4}-\d{2}-\d{2}/.test(inputText);
+      onCompose(dated?inputText:selectedDate+' '+inputText);return;
+    }
     const text = inputText.trim();
     if (!text || isSubmitting) return;
 
@@ -196,6 +245,8 @@ export function CalendarScreen() {
         return;
       }
       const updated: Event = { ...existing, ...resolved, startDate: selectedDate, endDate: selectedDate };
+      const verdict=check(toSchedule(updated),events.map(toSchedule),loadRules());
+      if(!verdict.ok){setErrorMessage(verdict.reasons.map(r=>r.message).join(' '));return;}
       setEvents((prev) => prev.map((event) => (event.id === editingId ? updated : event)));
       if (googleStatus.connected) {
         runGoogleSync(() => syncEventUpdate(updated)).then((googleEventId) => {
@@ -212,12 +263,6 @@ export function CalendarScreen() {
         sharedWith: [],
         ...resolved,
       };
-      // 규칙 검사 스텁(항상 통과) — 창민의 진짜 check() 완성되면 utils/ruleCheck.ts만 교체하면 됨
-      const outcome = check(newEvent, events, []);
-      if (outcome.result === 'block') {
-        setErrorMessage(outcome.reason ?? '규칙에 걸려서 등록할 수 없어요.');
-        return;
-      }
       setEvents((prev) => [...prev, newEvent]);
       if (googleStatus.connected) {
         runGoogleSync(() => syncEventCreate(newEvent)).then((googleEventId) => {
@@ -243,22 +288,43 @@ export function CalendarScreen() {
     setErrorMessage(null);
   };
 
-  const handleDelete = (event: Event) => {
-    setEvents((prev) => prev.filter((e) => e.id !== event.id));
-    if (editingId === event.id) {
-      resetEntry();
-    }
-    if (googleStatus.connected) {
-      runGoogleSync(() => syncEventDelete(event));
-    }
-  };
 
   return (
     <View style={styles.page}>
       <View style={styles.header}>
-        <Text style={styles.monthLabel}>
-          {formatMonthLabel(viewMode === 'month' ? viewedMonth : selectedDate)}
-        </Text>
+        {isEditingHeaderDate ? (
+          <View style={styles.headerDateEditor}>
+            <TextInput
+              value={yearInput}
+              onChangeText={handleYearInputChange}
+              keyboardType="number-pad"
+              maxLength={4}
+              placeholder="연도"
+              placeholderTextColor={colors.warmGray}
+              style={styles.yearInput}
+            />
+            <Text style={styles.headerDateEditorUnit}>년</Text>
+            <TextInput
+              value={monthInput}
+              onChangeText={handleMonthInputChange}
+              keyboardType="number-pad"
+              maxLength={2}
+              placeholder="월"
+              placeholderTextColor={colors.warmGray}
+              style={styles.monthInput}
+            />
+            <Text style={styles.headerDateEditorUnit}>월</Text>
+            <Pressable onPress={() => setIsEditingHeaderDate(false)} style={styles.headerDateDoneButton}>
+              <Text style={styles.headerDateDoneButtonText}>완료</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable onPress={openHeaderDateEditor}>
+            <Text style={styles.monthLabel}>
+              {formatMonthLabel(viewMode === 'month' ? viewedMonth : selectedDate)}
+            </Text>
+          </Pressable>
+        )}
         <View style={styles.viewToggle}>
           <Pressable
             onPress={switchToWeek}
@@ -358,18 +424,9 @@ export function CalendarScreen() {
               );
               return (
                 <Pressable key={date} onPress={() => setSelectedDate(date)} style={styles.monthCell}>
-                  {selected ? (
-                    <GlossyBox
-                      colors={['#d49478', '#b56d52']}
-                      shadowColor="#b17644"
-                      borderRadius={14}
-                      style={styles.monthCellCircle}
-                    >
-                      {cellText}
-                    </GlossyBox>
-                  ) : (
-                    <View style={styles.monthCellCircle}>{cellText}</View>
-                  )}
+                  <View style={[styles.monthCellCircle, selected && styles.monthCellCircleSelected]}>
+                    {cellText}
+                  </View>
                   {hasEventsOn(date) ? <View style={styles.monthCellDot} /> : null}
                 </Pressable>
               );
@@ -422,52 +479,33 @@ export function CalendarScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.agendaList}
         ListEmptyComponent={<Text style={styles.emptyText}>등록된 일정이 없어요.</Text>}
-        renderItem={({ item }) => {
-          const categoryColor =
-            categories.find((c) => c.name.trim().toLowerCase() === item.category.trim().toLowerCase())?.color ??
-            colors.warmGray;
-          return (
-            <View style={[styles.eventCard, { borderLeftColor: categoryColor }]}>
-              <View style={styles.eventCardBody}>
-                <Text style={styles.eventCategory}>{item.category}</Text>
-                <Text style={styles.eventTitle}>{item.title}</Text>
-                <Text style={styles.eventTime}>
-                  {item.time} · {item.durationMin}분
-                </Text>
+        renderItem={({ item }) => (
+          <View
+            style={[styles.eventCard, { borderLeftColor: CATEGORY_COLOR[item.category] ?? colors.warmGray }]}
+          >
+            <View style={styles.eventCardBody}>
+              <Text style={styles.eventCategory}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
+              <Text style={styles.eventTitle}>{item.title}</Text>
+              <Text style={styles.eventTime}>
+                {item.time} · {item.durationMin}분
+              </Text>
             </View>
             <View style={styles.eventCardActions}>
-              <Pressable
-                testID={`delete-${item.id}`}
-                onPress={() => handleDelete(item)}
-                style={styles.deleteButton}
-              >
-                <Text style={styles.deleteButtonText}>×</Text>
-              </Pressable>
               <View style={styles.secondaryButtonRow}>
                 <Pressable
                   testID={`gcal-${item.id}`}
                   onPress={() => Linking.openURL(buildGoogleCalendarLink(item))}
-                  style={styles.icsButton}
+                  style={styles.editButton}
                 >
-                  <Text style={styles.icsButtonText}>구글</Text>
+                  <Text style={styles.editButtonText}>구글</Text>
                 </Pressable>
-                {Platform.OS === 'web' ? (
-                  <Pressable
-                    testID={`ics-${item.id}`}
-                    onPress={() => downloadIcsForEvent(item)}
-                    style={styles.icsButton}
-                  >
-                    <Text style={styles.icsButtonText}>.ics</Text>
-                  </Pressable>
-                ) : null}
                 <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
                   <Text style={styles.editButtonText}>수정</Text>
                 </Pressable>
               </View>
             </View>
           </View>
-          );
-        }}
+        )}
       />
 
       {googleStatus.connected ? (
@@ -497,6 +535,51 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: colors.textDark,
+  },
+  headerDateEditor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+  },
+  yearInput: {
+    backgroundColor: colors.lightBeige,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textDark,
+    width: 64,
+    textAlign: 'center',
+  },
+  headerDateEditorUnit: {
+    fontSize: 14,
+    color: colors.textDark,
+    marginRight: 2,
+  },
+  monthInput: {
+    backgroundColor: colors.lightBeige,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textDark,
+    width: 48,
+    textAlign: 'center',
+  },
+  headerDateDoneButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: colors.terracotta,
+  },
+  headerDateDoneButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.white,
   },
   viewToggle: {
     flexDirection: 'row',
@@ -593,6 +676,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  monthCellCircleSelected: {
+    backgroundColor: colors.terracotta,
+    borderWidth: 2,
+    borderColor: '#8a4a36',
   },
   monthCellText: {
     fontSize: 13,
@@ -705,17 +793,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lightBeige,
   },
   editButtonText: {
-    color: colors.textDark,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  icsButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: colors.lightBeige,
-  },
-  icsButtonText: {
     color: colors.textDark,
     fontSize: 12,
     fontWeight: '600',

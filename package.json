@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.15",
@@ -11,13 +11,17 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@upstash/redis": "^1.38.4",
     "expo": "~57.0.23",
+    "expo-document-picker": "~57.0.2",
+    "expo-image-manipulator": "~57.0.18",
+    "expo-image-picker": "~57.0.18",
     "expo-linear-gradient": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
@@ -30,7 +34,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test:interpret": "tsx scripts/test-interpret.ts"
+    "test:interpret": "tsx scripts/test-interpret.ts",
+    "test": "node --test tests/scheduler/*.test.js && node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "expo export -p web"
   },
   "private": true
 }

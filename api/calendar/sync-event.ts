@@ -10,8 +10,8 @@ interface SyncEventPayload {
   endDate: string
   time: string
   durationMin: number
-  place: { name: string; address: string | null } | null
   remindMin?: number
+  place: { name: string; address: string | null } | null
 }
 
 interface SyncRequestBody {
@@ -82,15 +82,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const payload = {
       summary: body.event.title,
+      reminders: {useDefault:false,overrides:[{method:'popup',minutes:Math.max(0,Math.min(10080,Math.round(body.event.remindMin ?? 10)))}]},
       start: { dateTime: toRfc3339(body.event.startDate, body.event.time), timeZone: 'Asia/Seoul' },
       end: { dateTime: toRfc3339(endDate, endTime), timeZone: 'Asia/Seoul' },
       location: body.event.place
         ? [body.event.place.name, body.event.place.address].filter(Boolean).join(' ')
         : undefined,
-      reminders:
-        body.event.remindMin && body.event.remindMin > 0
-          ? { useDefault: false, overrides: [{ method: 'popup', minutes: body.event.remindMin }] }
-          : { useDefault: false, overrides: [] },
     }
 
     const isUpdate = body.action === 'update' && Boolean(body.googleEventId)

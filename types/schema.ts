@@ -17,6 +17,11 @@ export interface Event {
   createdFrom: 'share' | 'paste' | 'text' | 'voice'
   sharedWith: string[]
   googleEventId?: string // 구글 캘린더 자동 동기화로 만들어진 이벤트일 때만 존재
+  seriesId?: string
+  recurrence?: import('../utils/scheduler').Recurrence | null
+  aliasTerm?: string
+  aliasMeaning?: string
+  cancelledAt?: string
 }
 
 /**
@@ -60,19 +65,6 @@ export interface PlaceAlias {
   name: string // 실제 장소명, 예: "서울숲클라이밍 종로점"
   address: string | null
   category: string | null // 예: "클라이밍". 함께 등록해두면 다음부터 AI가 이 별명이 나왔을 때 자동으로 이 카테고리를 쓴다
-  createdAt: ISODateTime
-}
-
-/**
- * 사용자가 직접 만드는 일정 카테고리. 마이듀티의 근무 기호처럼 이름 + 색 블록으로 관리한다.
- * 미리 정해진 목록이 없다 — 처음 등장하는 카테고리는 AI 해석 결과로 제안되고, 사용자가 색을
- * 고르면 그때부터 이 목록에 쌓여서 다음엔 탭 한 번으로 재사용한다.
- */
-export interface Category {
-  id: string
-  userId: string
-  name: string // 예: "클라이밍"
-  color: string // hex, 예: "#C56F5D"
   createdAt: ISODateTime
 }
 

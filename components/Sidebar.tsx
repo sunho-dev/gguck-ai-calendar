@@ -5,6 +5,7 @@ import { startGoogleConnect } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { AppLogo } from './AppLogo';
 import { GlossyBox } from './GlossyBox';
+import {useStoredEvents} from '../utils/useStoredEvents';
 
 export type NavKey = 'calendar' | 'assistant' | 'rules' | 'alerts';
 
@@ -25,6 +26,7 @@ export function Sidebar({
   compact: boolean;
 }) {
   const googleStatus = useGoogleSyncStatus();
+  const alertCount=useStoredEvents().filter(e=>!e.cancelledAt).length;
 
   return (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
@@ -46,12 +48,12 @@ export function Sidebar({
               <>
                 <Text style={[styles.navIcon, selected && styles.navTextActive]}>{item.icon}</Text>
                 {!compact && (
-                  <Text style={[styles.navLabel, selected && styles.navTextActive]}>{item.label}</Text>
+                  <Text style={[styles.navLabel, selected && styles.navTextActive]}>{item.label}{item.key==='alerts'?` ${alertCount}`:''}</Text>
                 )}
               </>
             );
             return (
-              <Pressable key={item.key} onPress={() => onSelect(item.key)}>
+              <Pressable accessibilityRole="button" accessibilityLabel={item.label} key={item.key} onPress={() => onSelect(item.key)}>
                 {selected ? (
                   <GlossyBox
                     colors={['#cf8f71', '#b56d52']}

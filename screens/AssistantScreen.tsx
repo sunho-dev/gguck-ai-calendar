@@ -1,632 +1,232 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import * as XLSX from 'xlsx';
+import {useRef,useState} from 'react';
+import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,Switch,useWindowDimensions} from 'react-native';
+import {AgendaPreview} from '../components/AgendaPreview';
+import DateTimeField from '../components/DateTimeField';
+import {ImportReviewList} from '../components/ImportReviewList';
+import {Choice,RepeatChoices,RepeatFields,recurrenceFor,type RepeatMode} from '../components/ScheduleControls';
+import {useScheduleStaging} from '../utils/useScheduleStaging';
+import {colors} from '../constants/colors';
+import type {Event} from '../types/schema';
+import {interpretEvent} from '../utils/interpretEvent';
+import {getPlaceAliases,savePlaceAlias} from '../utils/placeAliasStore';
+import {loadStoredEvents,saveStoredEvents} from '../utils/eventsStorage';
+import {getGoogleSyncStatus,syncEventCreate,syncEventDelete} from '../utils/googleSync';
+import {categoryKey,loadRules,toEvent,toSchedule} from '../utils/scheduleAdapter';
+import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,type Schedule,type Category} from '../utils/scheduler';
+import {generateEventId} from '../utils/quickEntry';
+import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
+import {interpretBulkImage,interpretBulkTable} from '../utils/bulkInterpret';
+import {loadMyName,saveMyName} from '../utils/myNameStorage';
 
-import { categoryPalette, colors } from '../constants/colors';
-import { interpretEvent, type InterpretedEvent } from '../utils/interpretEvent';
-import { savePlaceAlias } from '../utils/placeAliasStore';
-import { getCategories, saveCategory } from '../utils/categoryStore';
-import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
-import { generateEventId } from '../utils/quickEntry';
-import { check, type CheckResult } from '../utils/ruleCheck';
-import { buildGoogleCalendarLink } from '../utils/googleCalendarLink';
-import type { Category, Event } from '../types/schema';
-
-type PlaceStep =
-  | { kind: 'none' }
-  | { kind: 'confirmGuess'; aliasText: string; guessedName: string; guessedAddress: string | null }
-  | { kind: 'manualInput'; aliasText: string };
-
-interface AssistantScreenProps {
-  initialText?: string;
-  autoRun?: boolean;
-  onInitialTextConsumed?: () => void;
+type Scope='one'|'following'|'all';
+export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;onRules?:()=>void;onCalendar?:()=>void}){
+ const [repeatMode,setRepeatMode]=useState<RepeatMode>('none'),[selectedDate,setSelectedDate]=useState(todayKST());
+ const [failure,setFailure]=useState('');
+ const wide=useWindowDimensions().width>=1100;
+ const [text,setText]=useState(initialText),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const [draft,setDraft]=useState<Schedule|null>(null),[unknown,setUnknown]=useState<string|null>(null);
+ const [name,setName]=useState(''),[address,setAddress]=useState(''),[category,setCategory]=useState<Category>('personal'),[remember,setRemember]=useState(true);
+ const [issues,setIssues]=useState<string[]>([]),[choices,setChoices]=useState<Schedule[]>([]),[skipped,setSkipped]=useState<string[]>([]);
+ const [cancelChoices,setCancelChoices]=useState<Schedule[]>([]),[target,setTarget]=useState<Schedule|null>(null),[scope,setScope]=useState<Scope>('one');
+ const [importDrafts,setImportDrafts]=useState<ImportedEventDraft[]|null>(null),[importSource,setImportSource]=useState<string|null>(null);
+ const [importError,setImportError]=useState<string|null>(null),[isImporting,setIsImporting]=useState(false),[myName,setMyName]=useState(()=>loadMyName());
+ const lock=useRef(false);
+ const all=()=>loadStoredEvents()||[];
+ const handleMyNameChange=(value:string)=>{setMyName(value);saveMyName(value);};
+ const handleImportIcs=async()=>{
+  setImportError(null);
+  const picked=await DocumentPicker.getDocumentAsync({type:'*/*'});
+  if(picked.canceled)return;
+  const asset=picked.assets[0];
+  try{
+   const content=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
+   const drafts=parseIcsContent(content);
+   if(drafts.length===0){setImportError('.ics 파일에서 일정을 찾지 못했어요.');return;}
+   setImportSource('.ics 파일에서 찾은 일정');setImportDrafts(drafts);
+  }catch(err){console.warn('[ics-import] 실패:',err);setImportError('.ics 파일을 읽는 데 실패했어요.');}
+ };
+ const handleImportExcel=async()=>{
+  setImportError(null);
+  const picked=await DocumentPicker.getDocumentAsync({type:'*/*'});
+  if(picked.canceled)return;
+  const asset=picked.assets[0];
+  try{
+   let csvText:string;
+   if(asset.name.toLowerCase().endsWith('.csv')){
+    csvText=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
+   }else{
+    const buffer=asset.file?await asset.file.arrayBuffer():await(await fetch(asset.uri)).arrayBuffer();
+    const workbook=XLSX.read(buffer,{type:'array'});
+    csvText=XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
+   }
+   setIsImporting(true);
+   const drafts=await interpretBulkTable(csvText,myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('파일에서 일정을 찾지 못했어요.');return;}
+   setImportSource('엑셀 파일에서 찾은 일정');setImportDrafts(drafts);
+  }catch(err){setIsImporting(false);console.warn('[excel-import] 실패:',err);setImportError(err instanceof Error?err.message:'엑셀 파일을 처리하는 데 실패했어요.');}
+ };
+ const handleImportPhoto=async()=>{
+  setImportError(null);
+  const picked=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],quality:1});
+  if(picked.canceled)return;
+  const asset=picked.assets[0];
+  try{
+   setIsImporting(true);
+   const maxDimension=1600,isLandscape=asset.width>=asset.height;
+   const resizeAction=isLandscape?{resize:{width:Math.min(asset.width,maxDimension)}}:{resize:{height:Math.min(asset.height,maxDimension)}};
+   const manipulated=await manipulateAsync(asset.uri,[resizeAction],{base64:true,compress:.7,format:SaveFormat.JPEG});
+   if(!manipulated.base64){setImportError('이미지를 처리하지 못했어요.');setIsImporting(false);return;}
+   const drafts=await interpretBulkImage(manipulated.base64,'image/jpeg',myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('사진에서 일정을 찾지 못했어요.');return;}
+   setImportSource('사진에서 찾은 일정');setImportDrafts(drafts);
+  }catch(err){setIsImporting(false);console.warn('[photo-import] 실패:',err);setImportError(err instanceof Error?err.message:'사진을 처리하는 데 실패했어요.');}
+ };
+ const handleConfirmImport=async(selected:ImportedEventDraft[])=>{
+  const created:Event[]=selected.map(draft=>({
+   id:generateEventId(),userId:'local',title:draft.title,category:'personal',
+   startDate:draft.startDate,endDate:draft.startDate,time:draft.time,durationMin:draft.durationMin,
+   place:draft.place?{...draft.place,lat:0,lng:0}:null,remindMin:0,bufferMin:0,createdFrom:'paste',sharedWith:[],
+  }));
+  saveStoredEvents([...all(),...created]);
+  setImportDrafts(null);
+  setNotice(`가져온 일정 ${created.length}개를 등록했어요.`);
+  if(created[0])setSelectedDate(created[0].startDate);
+ };
+ useScheduleStaging(async({text:input})=>{
+  if(lock.current||draft||target||cancelChoices.length)throw Error('현재 확인 중인 요청을 먼저 마쳐 주세요.');
+  if(typeof input!=='string'||!input.trim()||input.length>300||hasCancelIntent(input))throw Error('300자 이내의 등록 검토 문장을 입력해 주세요. 취소는 입력창에서 요청해 주세요.');
+  const aliases=(await getPlaceAliases()).map(a=>({term:a.alias,meaning:a.name,location:a.address||a.name,category:categoryKey(a.category||'personal')}));
+  const result=interpretChat(input,aliases);
+  setText(input);setDraft(result.event);setSelectedDate(result.event.date);setIssues([]);setSkipped([]);setFailure('');
+  if(result.unknown){setUnknown(result.unknown);setName('');setAddress('');setCategory(result.event.category);setRemember(true);}
+  return {status:result.unknown?'clarification_required':'staged',draft:result.event};
+ });
+ const close=()=>{if(lock.current)return;setDraft(null);setUnknown(null);setTarget(null);setCancelChoices([]);setIssues([]);setChoices([]);setSkipped([]);setFailure('');};
+ async function guarded(job:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setFailure('');try{await job();}catch(e){setFailure(e instanceof Error?e.message:'처리하지 못했어요.');}finally{lock.current=false;setBusy(false);}}
+ async function persist(schedules:Schedule[]){
+  const rules=loadRules(),seriesId=schedules[0]?.recurrence?`series-${Date.now()}`:undefined;
+  const created=schedules.map(s=>toEvent({...s,seriesId},rules));
+  saveStoredEvents([...all(),...created]);
+  setSelectedDate(created[0].startDate);
+  setDraft(null);setIssues([]);setChoices([]);setSkipped([]);setText('');
+  setNotice(`‘${created[0].title}’ ${created.length}개 등록 완료 · ${created[0].startDate} ${created[0].time} · 알림 ${created[0].remindMin}분 전`);
+  const status=await getGoogleSyncStatus();if(!status.connected)return;
+  let synced=0;
+  for(const e of created){const id=await syncEventCreate(e);if(id){synced++;saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}}
+  setNotice(`로컬 ${created.length}개 등록 · Google ${synced}개 반영${synced<created.length?' · 일부 동기화 실패: Google 캘린더를 확인해 주세요.':''}`);
+ }
+ async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
+  setChoices([]);setIssues([]);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s.date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time)||!s.title.trim()||!Number.isFinite(s.duration)||s.duration<15||s.duration>480||!Number.isFinite(stamp(s.date,s.time))||todayKST(new Date(stamp(s.date,s.time)))!==s.date){setDraft(s);setIssues(['날짜·시간·제목과 소요 시간(15~480분)을 확인해 주세요.']);return;}
+  if(s.ambiguous){setDraft(s);return;}
+  const events=all().map(toSchedule),rules=loadRules();
+  if(s.recurrence){
+   const plan=planSeries(s,events,rules,skip);
+   if(!confirmed||plan.error||plan.conflicts.length||!plan.accepted.length){setDraft(s);setIssues(plan.error?[plan.error]:plan.conflicts.map(c=>`${c.event.date}: ${c.reasons.map(r=>r.message).join(' ')}`));return;}
+   await persist(plan.accepted);return;
+  }
+  const verdict=check(s,events,rules);
+  if(!verdict.ok){setDraft(s);setIssues(verdict.reasons.map(r=>r.message));setChoices(alternatives(s,events,rules));return;}
+  await persist([s]);
+ }
+ async function cancel(t:Schedule,range:Scope){
+  const selected=new Set(cancellationTargets(all().map(toSchedule),t,range).map(e=>e.id));
+  const entries=all().filter(e=>selected.has(e.id));let done=0;
+  for(const entry of entries){
+   // Do not report a Google deletion as successful if the request failed.
+   if(entry.googleEventId)await syncEventDelete(entry);
+   saveStoredEvents(all().map(e=>e.id===entry.id?{...e,cancelledAt:new Date().toISOString()}:e));done++;
+  }
+  setNotice(`${done}개 일정 취소 완료`);setTarget(null);setCancelChoices([]);setText('');
+  setSelectedDate(t.date);
+ }
+ async function submit(){await guarded(async()=>{
+  setNotice('');setSkipped([]);setIssues([]);setChoices([]);
+  if(hasCancelIntent(text)){
+   const r=findCancellation(normalizeChat(text),all().map(toSchedule));setScope(r.scope);
+   if(!r.matches.length)throw Error('일치하는 일정이 없어요.');
+   if(r.matches.length===1&&!r.matches[0].seriesId){await cancel(r.matches[0],'one');return;}
+   if(r.matches.length===1)setTarget(r.matches[0]);else setCancelChoices(r.matches);return;
+  }
+  const aliases=(await getPlaceAliases()).map(a=>({term:a.alias,meaning:a.name,location:a.address||a.name,category:categoryKey(a.category||'personal')}));
+  let event:Schedule,unrecognized:string|null=null,needsReview=false;
+  try{const r=interpretChat(text,aliases);event=r.event;unrecognized=r.unknown;setNotice('기본 문장 규칙으로 해석했어요.');}
+  catch(localError){
+   if(/매주|매일|매월|평일|매달|격주|마다/.test(text))throw localError;
+   const ai=await interpretEvent({text});
+   if(ai.endDate!==ai.startDate)throw Error('기간 일정은 캘린더에서 확인해 주세요. 일정 비서는 하루 일정과 반복 일정을 지원합니다.');
+   event={title:ai.title,date:ai.startDate,time:ai.time||'',duration:ai.durationMin??60,category:categoryKey(ai.category),location:ai.place?.name,ambiguous:ai.ambiguousFields.includes('time')};
+   unrecognized=ai.placeAliasCandidate;needsReview=ai.ambiguousFields.some(f=>f!=='place')||!ai.time;
+   setNotice('Gemini로 해석했어요.');
+  }
+  if(!event.recurrence&&repeatMode!=='none')event={...event,recurrence:recurrenceFor(repeatMode,event.date)};
+  if(/^\d{4}-\d{2}-\d{2}$/.test(event.date))setSelectedDate(event.date);
+  if(unrecognized){setDraft(event);setUnknown(unrecognized);setName('');setAddress('');setCategory(event.category);setRemember(true);return;}
+  if(needsReview){setDraft(event);setIssues(['AI가 불확실하게 해석한 정보가 있어요. 아래 값을 확인해 주세요.']);return;}
+  await proceed(event,false,[]);
+ });}
+ const field=(label:string,value:string,change:(s:string)=>void)=><View><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} style={styles.input} value={value} onChangeText={change} editable={!busy}/></View>;
+ const button=(label:string,onPress:()=>void,secondary=false,disabled=false)=><Pressable accessibilityRole="button" disabled={busy||disabled} onPress={onPress} style={[styles.button,secondary&&styles.secondary,(busy||disabled)&&{opacity:.5}]}><Text style={{color:secondary?colors.textDark:colors.white}}>{label}</Text></Pressable>;
+ const patch=(p:Partial<Schedule>)=>{if(draft){setDraft({...draft,...p});setChoices([]);setIssues([]);setSkipped([]);}};
+ const recurrencePlan=draft?.recurrence?planSeries(draft,all().map(toSchedule),loadRules(),skipped):null;
+ const liveVerdict=draft&&!draft.recurrence&&!draft.ambiguous?check(draft,all().map(toSchedule),loadRules()):null;
+ const liveChoices=draft&&liveVerdict&&!liveVerdict.ok?alternatives(draft,all().map(toSchedule),loadRules()):[];
+ return <ScrollView style={styles.page} contentContainerStyle={{paddingBottom:40}}><Text style={styles.heading}>일정은 꾹에게 맡겨요.</Text><Text style={styles.label}>한 줄로 남기면, 시간과 규칙을 함께 살펴볼게요.</Text>
+ <View style={[styles.columns,wide&&{flexDirection:'row'}]}><View style={{flex:wide?1.35:undefined,minWidth:0}}><View style={styles.panel}><Text style={styles.sectionTitle}>어떤 일정이 있나요?</Text>
+ <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder="내일 오후 8시 집에서 운동" editable={!busy}/>
+ {!hasCancelIntent(text)&&<><Text style={styles.label}>반복 방식</Text><RepeatChoices value={repeatMode} onChange={setRepeatMode} disabled={busy}/><Text style={styles.label}>문장에 적은 반복 조건이 우선해요.</Text></>}
+ {button(busy?'처리 중…':hasCancelIntent(text)?'요청 보내기':'일정 등록',()=>void submit())}
+ <Text style={styles.label}>확인이 필요할 때만 물어봐요. 소요 시간 생략 시 60분.</Text>
+ <Text style={styles.sectionTitle}>이렇게 말해보세요</Text><View style={styles.row}>{['내일 오후 8시 운동','매주 월수금 오후 8시 운동','다음주 금요일 8시 종숲 ㄱ','내일 운동 취소'].map(example=><Choice key={example} label={example} disabled={busy} onPress={()=>{setText(example);setRepeatMode('none');}}/>)}</View></View>
+ {Platform.OS==='web'&&<View style={[styles.panel,styles.importPanel]}><Text style={styles.sectionTitle}>여러 일정 한 번에 가져오기</Text><Text style={styles.label}>.ics 파일, 근무표 엑셀, 근무표 사진에서 일정을 한 번에 뽑아 등록해요.</Text>
+ {field('표/사진 속 내 이름',myName,handleMyNameChange)}
+ {!importDrafts&&<View style={styles.row}>{button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}{button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}{button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}</View>}
+ {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
+ {!!importError&&<Text style={styles.notice}>{importError}</Text>}
+ {importDrafts&&<ImportReviewList title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={selected=>void handleConfirmImport(selected)} onCancel={()=>setImportDrafts(null)}/>}
+ </View>}
+ <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
+ <View style={styles.panel}><Text style={styles.sectionTitle}>말 한마디가 일정이 되는 순간.</Text><Text style={styles.label}>등록도 취소도 한 문장으로. 일정은 이 브라우저에 저장돼요.</Text></View></View>
+ <View style={{flex:wide?1:undefined,minWidth:0}}><AgendaPreview date={selectedDate} onDate={setSelectedDate} onRules={onRules} onCalendar={onCalendar}/></View></View>
+ <Modal visible={!!draft||!!target||cancelChoices.length>0||!!failure} transparent animationType="fade" onRequestClose={close}>
+ <View style={styles.overlay}><ScrollView style={styles.modal} contentContainerStyle={{padding:22}}><Text style={styles.heading}>꾹이 확인할게요</Text>
+ {!!unknown&&draft?<>
+ <Text>‘{unknown}’은 무슨 뜻인가요? 알고 있는 일반 장소의 주소는 묻지 않아요.</Text>
+ {field('뜻 / 장소 이름',name,setName)}{field('주소·지점 설명 (선택)',address,setAddress)}
+ <View style={styles.row}>{Object.entries(categories).map(([key,label])=><View key={key}>{button((category===key?'✓ ':'')+label,()=>setCategory(key as Category),true)}</View>)}</View>
+ <View style={styles.row}><Switch value={remember} onValueChange={setRemember} disabled={busy}/><Text>이 뜻을 다음부터 기억하기</Text></View>
+ {button('이 뜻으로 계속하기',()=>void guarded(async()=>{if(!name.trim())throw Error('뜻이나 장소 이름을 적어 주세요.');const value={term:unknown,meaning:name.trim(),location:address.trim()||name.trim(),category};if(remember)await savePlaceAlias({alias:unknown,name:value.meaning,address:address.trim()||null,category});setUnknown(null);await proceed(applyAlias(draft,value));}))}
+ {button('원문 그대로 계속',()=>{setUnknown(null);void guarded(()=>proceed(draft));},true)}
+ </>:draft?<>
+ <Text style={styles.sectionTitle}>{draft.ambiguous?'오전일까요, 오후일까요?':draft.recurrence?'언제까지 함께할까요?':liveVerdict&&!liveVerdict.ok?'이 시간은 조정이 필요해요.':'일정 확인'}</Text>
+ <Text style={styles.label}>{draft.title} · {draft.duration}분 · {categories[draft.category]} · 알림 {loadRules().reminders[draft.category]}분 전</Text>
+ {field('제목',draft.title,title=>patch({title}))}<Text style={styles.label}>{draft.recurrence?'반복 시작일':'날짜'}</Text><DateTimeField label="일정 날짜" kind="date" value={draft.date} onChange={date=>patch({date})} disabled={busy}/><Text style={styles.label}>시간 (24시간제)</Text><DateTimeField label="일정 시간" kind="time" value={draft.time} onChange={time=>patch({time,ambiguous:false})} disabled={busy}/>
+ {draft.ambiguous&&<View style={styles.row}>{[0,12].map(n=><View key={n}>{button((n?'오후':'오전')+(draft.recurrence?' 선택':'로 등록'),()=>{const resolved={...draft,time:String(Number(draft.time.slice(0,2))%12+n).padStart(2,'0')+draft.time.slice(2),ambiguous:false};if(draft.recurrence)patch(resolved);else void guarded(()=>proceed(resolved));},true)}</View>)}</View>}
+ {field('소요 시간 (분)',String(draft.duration),v=>patch({duration:Number(v)}))}
+ <Text>장소: {draft.location||'없음'} · 기본 소요 시간 60분</Text>
+ <View style={styles.row}>{Object.entries(categories).map(([key,label])=><View key={key}>{button((draft.category===key?'✓ ':'')+label,()=>patch({category:key as Category}),true)}</View>)}</View>
+ <RepeatFields draft={draft} onChange={patch} disabled={busy}/>
+ {draft.recurrence&&<><Text style={styles.label}>반복 종료일 (포함) · 최대 1년</Text><DateTimeField label="반복 종료일" kind="date" value={draft.recurrence.until} onChange={until=>patch({recurrence:{...draft.recurrence!,until}})} disabled={busy}/><Text style={styles.label}>전체 {recurrencePlan?.occurrences.length}회 · 등록 가능 {recurrencePlan?.accepted.length}회 · 확인 필요 {recurrencePlan?.conflicts.length}회 · 건너뛰기 {skipped.length}회</Text>
+ {recurrencePlan?.error&&<Text style={styles.notice}>{recurrencePlan.error}</Text>}
+ {recurrencePlan?.conflicts.map(c=><View key={c.event.date}><Text>{c.event.date}: {c.reasons.map(r=>r.message).join(' ')}</Text>{button('이 날짜 건너뛰기',()=>setSkipped([...skipped,c.event.date]),true)}</View>)}
+ {skipped.map(date=><View key={date}>{button(`${date} 다시 포함`,()=>setSkipped(skipped.filter(d=>d!==date)),true)}</View>)}</>}
+ {issues.map((message,i)=><Text key={i} style={styles.notice}>{message}</Text>)}
+ {liveVerdict&&!liveVerdict.ok&&liveVerdict.reasons.map((r,i)=><Text key={i} style={styles.notice}>{r.message}</Text>)}
+ {liveChoices.map(c=><View key={c.date+c.time}>{button(`${c.date} ${c.time}로 등록`,()=>void guarded(()=>proceed(c,true)),true)}</View>)}
+ {button(draft.recurrence?`${recurrencePlan?.accepted.length||0}회 반복 일정 등록`:'확인하고 등록',()=>void guarded(()=>proceed(draft,true)),false,!!draft.ambiguous||!draft.title.trim()||!!(recurrencePlan&&(recurrencePlan.error||recurrencePlan.conflicts.length||!recurrencePlan.accepted.length))||!!(liveVerdict&&!liveVerdict.ok))}
+ </>:target?<>
+ <Text>{target.title} · {target.date} {target.time}</Text><Text>어느 범위를 취소할까요?</Text>
+ {(['one','following','all'] as Scope[]).map((s,i)=><View key={s}>{button((scope===s?'✓ ':'')+['이번만','선택 회차 및 이후','전체 반복'][i],()=>setScope(s),true)}</View>)}
+ {button(`${cancellationTargets(all().map(toSchedule),target,scope).length}개 취소 확인`,()=>void guarded(()=>cancel(target,scope)))}
+ </>:cancelChoices.map(c=><View key={c.id}>{button(`${c.date} ${c.time} · ${c.title}`,()=>{if(c.seriesId){setCancelChoices([]);setTarget(c);}else void guarded(()=>cancel(c,'one'));},true)}</View>)}
+ {button('닫기',close,true)}
+ {!!failure&&<Text accessibilityRole="alert" style={styles.notice}>{failure}</Text>}
+ <Text style={styles.notice}>{notice}</Text></ScrollView></View></Modal></ScrollView>;
 }
-
-export function AssistantScreen({ initialText = '', autoRun = false, onInitialTextConsumed }: AssistantScreenProps) {
-  const [text, setText] = useState(initialText);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<InterpretedEvent | null>(null);
-  const [placeStep, setPlaceStep] = useState<PlaceStep>({ kind: 'none' });
-  const [manualName, setManualName] = useState('');
-  const [manualAddress, setManualAddress] = useState('');
-  const [categoryInput, setCategoryInput] = useState('');
-  const [savedNotice, setSavedNotice] = useState<string | null>(null);
-  const [registeredEventId, setRegisteredEventId] = useState<string | null>(null);
-  const [registeredEvent, setRegisteredEvent] = useState<Event | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [pendingNewCategory, setPendingNewCategory] = useState<string | null>(null);
-  const [blockResult, setBlockResult] = useState<CheckResult | null>(null);
-
-  useEffect(() => {
-    getCategories().then(setCategories);
-  }, []);
-
-  const findCategory = (name: string) =>
-    categories.find((c) => c.name.trim().toLowerCase() === name.trim().toLowerCase()) ?? null;
-
-  const runInterpret = async () => {
-    if (!text.trim()) return;
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setSavedNotice(null);
-    setPlaceStep({ kind: 'none' });
-    setRegisteredEventId(null);
-    setRegisteredEvent(null);
-    setPendingNewCategory(null);
-    setBlockResult(null);
-    try {
-      const event = await interpretEvent({ text, createdFrom: autoRun ? 'share' : 'paste' });
-      setResult(event);
-      setCategoryInput(event.category); // 확인/입력 화면에서 바로 고칠 수 있게 미리 채워둠
-
-      const latestCategories = await getCategories();
-      setCategories(latestCategories);
-      const known = latestCategories.find((c) => c.name.trim().toLowerCase() === event.category.trim().toLowerCase());
-      if (!known) {
-        setPendingNewCategory(event.category);
-      }
-
-      const placeIsAmbiguous = event.ambiguousFields.includes('place');
-      if (placeIsAmbiguous && event.placeAliasCandidate) {
-        if (event.place) {
-          setPlaceStep({
-            kind: 'confirmGuess',
-            aliasText: event.placeAliasCandidate,
-            guessedName: event.place.name,
-            guessedAddress: event.place.address,
-          });
-        } else {
-          setPlaceStep({ kind: 'manualInput', aliasText: event.placeAliasCandidate });
-        }
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (autoRun && initialText.trim()) {
-      runInterpret();
-    }
-    onInitialTextConsumed?.();
-    // 마운트 시 한 번만: 공유로 열렸을 때 자동 실행 + 부모에게 소비했다고 알림
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const buildEvent = (): Event | null => {
-    if (!result) return null;
-    return {
-      id: generateEventId(),
-      userId: 'local',
-      title: result.title,
-      category: result.category,
-      startDate: result.startDate,
-      endDate: result.endDate,
-      time: result.time ?? '09:00',
-      durationMin: result.durationMin ?? 60,
-      place: result.place
-        ? { name: result.place.name, address: result.place.address ?? '', lat: 0, lng: 0 }
-        : null,
-      remindMin: result.remindMin ?? 0,
-      bufferMin: result.bufferMin ?? 0,
-      createdFrom: autoRun ? 'share' : 'paste',
-      sharedWith: [],
-    };
-  };
-
-  const saveEvent = (newEvent: Event) => {
-    saveStoredEvents([...(loadStoredEvents() ?? []), newEvent]);
-    setRegisteredEventId(newEvent.id);
-    setRegisteredEvent(newEvent);
-    setBlockResult(null);
-  };
-
-  const registerEvent = () => {
-    const newEvent = buildEvent();
-    if (!newEvent) return;
-    // 규칙 검사(check())는 아직 스텁 — 항상 통과. 창민이 실제 규칙 엔진을 완성하면
-    // utils/ruleCheck.ts의 check() 본문만 교체하면 이 호출부는 그대로 작동한다.
-    const outcome = check(newEvent, loadStoredEvents() ?? [], []);
-    if (outcome.result === 'block') {
-      setBlockResult(outcome);
-      return;
-    }
-    saveEvent(newEvent);
-  };
-
-  const forceRegisterDespiteBlock = () => {
-    const newEvent = buildEvent();
-    if (!newEvent) return;
-    saveEvent(newEvent);
-  };
-
-  const undoRegister = () => {
-    if (!registeredEventId) return;
-    saveStoredEvents((loadStoredEvents() ?? []).filter((e) => e.id !== registeredEventId));
-    setRegisteredEventId(null);
-    setRegisteredEvent(null);
-  };
-
-  const openInGoogleCalendar = () => {
-    if (!registeredEvent) return;
-    Linking.openURL(buildGoogleCalendarLink(registeredEvent));
-  };
-
-  const pickColorForNewCategory = async (color: string) => {
-    if (!pendingNewCategory) return;
-    const saved = await saveCategory({ name: pendingNewCategory, color });
-    setCategories((prev) => [...prev.filter((c) => c.id !== saved.id), saved]);
-    setPendingNewCategory(null);
-  };
-
-  const applyCategory = (category: Category) => {
-    setResult((prev) => (prev ? { ...prev, category: category.name } : prev));
-    setCategoryInput(category.name);
-    setPendingNewCategory(null);
-  };
-
-  const confirmGuess = async () => {
-    if (placeStep.kind !== 'confirmGuess') return;
-    const category = categoryInput.trim() || null;
-    await savePlaceAlias({
-      alias: placeStep.aliasText,
-      name: placeStep.guessedName,
-      address: placeStep.guessedAddress,
-      category,
-    });
-    setResult((prev) =>
-      prev
-        ? { ...prev, place: { name: placeStep.guessedName, address: placeStep.guessedAddress }, category: category ?? prev.category }
-        : prev,
-    );
-    setSavedNotice(
-      `"${placeStep.aliasText}" = ${placeStep.guessedName}${category ? ` (${category})` : ''} 저장했어요. 다음부터는 안 물어볼게요.`,
-    );
-    setPlaceStep({ kind: 'none' });
-  };
-
-  const rejectGuess = () => {
-    if (placeStep.kind !== 'confirmGuess') return;
-    setManualName('');
-    setManualAddress('');
-    setPlaceStep({ kind: 'manualInput', aliasText: placeStep.aliasText });
-  };
-
-  const submitManual = async () => {
-    if (placeStep.kind !== 'manualInput' || !manualName.trim()) return;
-    const category = categoryInput.trim() || null;
-    const address = manualAddress.trim() || null;
-    await savePlaceAlias({
-      alias: placeStep.aliasText,
-      name: manualName.trim(),
-      address,
-      category,
-    });
-    setResult((prev) =>
-      prev ? { ...prev, place: { name: manualName.trim(), address }, category: category ?? prev.category } : prev,
-    );
-    setSavedNotice(
-      `"${placeStep.aliasText}" = ${manualName.trim()}${category ? ` (${category})` : ''} 저장했어요. 다음부터는 안 물어볼게요.`,
-    );
-    setPlaceStep({ kind: 'none' });
-    setManualName('');
-    setManualAddress('');
-  };
-
-  return (
-    <View style={styles.page}>
-      <Text style={styles.heading}>일정 비서</Text>
-      <Text style={styles.subheading}>카톡 대화나 공지 문구를 붙여넣으면 일정 정보를 뽑아드려요.</Text>
-
-      <TextInput
-        style={styles.input}
-        multiline
-        placeholder="예: 내일 8시 종숲 ㄱ"
-        placeholderTextColor={colors.warmGray}
-        value={text}
-        onChangeText={setText}
-      />
-
-      <Pressable
-        style={[styles.button, (!text.trim() || loading) && styles.buttonDisabled]}
-        onPress={runInterpret}
-        disabled={!text.trim() || loading}
-      >
-        {loading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>해석하기</Text>}
-      </Pressable>
-
-      {error && <Text style={styles.errorText}>{error}</Text>}
-
-      {result && (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>{result.title}</Text>
-
-          <View style={styles.categoryRow}>
-            <View
-              style={[
-                styles.categoryPill,
-                { backgroundColor: findCategory(result.category)?.color ?? colors.lightBeige },
-              ]}
-            >
-              <Text style={styles.categoryPillText}>{result.category}</Text>
-            </View>
-          </View>
-
-          {categories.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryPickRow}>
-              {categories.map((c) => (
-                <Pressable
-                  key={c.id}
-                  style={[styles.categoryChip, { borderColor: c.color }]}
-                  onPress={() => applyCategory(c)}
-                >
-                  <View style={[styles.categoryDot, { backgroundColor: c.color }]} />
-                  <Text style={styles.categoryChipText}>{c.name}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          )}
-
-          {pendingNewCategory && (
-            <View style={styles.newCategoryBox}>
-              <Text style={styles.fieldLabel}>"{pendingNewCategory}"는 새 카테고리예요. 색을 골라주세요</Text>
-              <View style={styles.colorSwatchRow}>
-                {categoryPalette.map((color) => (
-                  <Pressable
-                    key={color}
-                    style={[styles.colorSwatch, { backgroundColor: color }]}
-                    onPress={() => pickColorForNewCategory(color)}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
-
-          <Text style={styles.resultLine}>
-            날짜: {result.startDate}
-            {result.endDate !== result.startDate ? ` ~ ${result.endDate}` : ''}
-          </Text>
-          <Text style={styles.resultLine}>시간: {result.time ?? '미지정'}</Text>
-          <Text style={styles.resultLine}>
-            장소: {result.place ? `${result.place.name}${result.place.address ? ` (${result.place.address})` : ''}` : '미지정'}
-          </Text>
-          <Text style={styles.resultConfidence}>확신도: {result.confidence}</Text>
-
-          {registeredEventId ? (
-            <View>
-              <View style={styles.registerRow}>
-                <Text style={styles.registeredText}>✓ 일정에 등록했어요</Text>
-                <Pressable onPress={undoRegister}>
-                  <Text style={styles.undoText}>되돌리기</Text>
-                </Pressable>
-              </View>
-              <Pressable style={styles.googleButton} onPress={openInGoogleCalendar}>
-                <Text style={styles.googleButtonText}>구글 캘린더에도 추가</Text>
-              </Pressable>
-            </View>
-          ) : blockResult ? (
-            <View style={styles.blockBox}>
-              <Text style={styles.blockText}>🚫 {blockResult.reason ?? '규칙에 걸려서 등록이 막혔어요.'}</Text>
-              <Pressable style={styles.blockOverrideButton} onPress={forceRegisterDespiteBlock}>
-                <Text style={styles.undoText}>그래도 등록하기</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable style={styles.registerButton} onPress={registerEvent}>
-              <Text style={styles.registerButtonText}>이 일정 등록하기</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
-
-      {placeStep.kind === 'confirmGuess' && (
-        <View style={styles.confirmCard}>
-          <Text style={styles.confirmText}>
-            "{placeStep.aliasText}"가 <Text style={styles.confirmStrong}>{placeStep.guessedName}</Text> 맞아요?
-          </Text>
-          <Text style={styles.fieldLabel}>카테고리</Text>
-          <TextInput
-            style={styles.manualInput}
-            placeholder="예: 클라이밍, 약속, 운동..."
-            placeholderTextColor={colors.warmGray}
-            value={categoryInput}
-            onChangeText={setCategoryInput}
-          />
-          <View style={styles.confirmButtonRow}>
-            <Pressable style={styles.confirmButtonYes} onPress={confirmGuess}>
-              <Text style={styles.confirmButtonText}>맞아요</Text>
-            </Pressable>
-            <Pressable style={styles.confirmButtonNo} onPress={rejectGuess}>
-              <Text style={styles.confirmButtonTextNo}>아니에요</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      {placeStep.kind === 'manualInput' && (
-        <View style={styles.confirmCard}>
-          <Text style={styles.confirmText}>"{placeStep.aliasText}"가 정확히 어디예요?</Text>
-          <TextInput
-            style={styles.manualInput}
-            placeholder="장소 이름 (예: 서울숲클라이밍 종로점)"
-            placeholderTextColor={colors.warmGray}
-            value={manualName}
-            onChangeText={setManualName}
-          />
-          <TextInput
-            style={styles.manualInput}
-            placeholder="주소 (선택)"
-            placeholderTextColor={colors.warmGray}
-            value={manualAddress}
-            onChangeText={setManualAddress}
-          />
-          <Text style={styles.fieldLabel}>카테고리</Text>
-          <TextInput
-            style={styles.manualInput}
-            placeholder="예: 클라이밍, 약속, 운동..."
-            placeholderTextColor={colors.warmGray}
-            value={categoryInput}
-            onChangeText={setCategoryInput}
-          />
-          <Pressable
-            style={[styles.confirmButtonYes, !manualName.trim() && styles.buttonDisabled]}
-            onPress={submitManual}
-            disabled={!manualName.trim()}
-          >
-            <Text style={styles.confirmButtonText}>저장하고 다음부턴 안 물어보기</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {savedNotice && <Text style={styles.savedNotice}>{savedNotice}</Text>}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 480,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.textDark,
-    marginBottom: 4,
-  },
-  subheading: {
-    fontSize: 13,
-    color: colors.warmGray,
-    marginBottom: 16,
-  },
-  input: {
-    minHeight: 90,
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 14,
-    color: colors.textDark,
-    textAlignVertical: 'top',
-    marginBottom: 12,
-  },
-  button: {
-    backgroundColor: colors.terracotta,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: colors.white,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  errorText: {
-    color: colors.terracotta,
-    fontSize: 13,
-    marginBottom: 12,
-  },
-  resultCard: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.textDark,
-    marginBottom: 8,
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  categoryPill: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-  },
-  categoryPillText: {
-    color: colors.white,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  categoryPickRow: {
-    marginBottom: 10,
-  },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderRadius: 999,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    marginRight: 8,
-  },
-  categoryDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  categoryChipText: {
-    fontSize: 12,
-    color: colors.textDark,
-    fontWeight: '600',
-  },
-  newCategoryBox: {
-    backgroundColor: colors.cream,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-  },
-  colorSwatchRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 6,
-  },
-  colorSwatch: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  resultLine: {
-    fontSize: 13,
-    color: colors.textDark,
-    marginBottom: 4,
-  },
-  resultConfidence: {
-    fontSize: 12,
-    color: colors.warmGray,
-    marginTop: 4,
-  },
-  registerButton: {
-    backgroundColor: colors.terracotta,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  registerButtonText: {
-    color: colors.white,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  registerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  blockBox: {
-    backgroundColor: '#F6DEDC',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 12,
-  },
-  blockText: {
-    color: '#A13A3A',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  blockOverrideButton: {
-    alignSelf: 'flex-start',
-  },
-  registeredText: {
-    color: colors.terracotta,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  undoText: {
-    color: colors.warmGray,
-    fontSize: 13,
-    textDecorationLine: 'underline',
-  },
-  googleButton: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.lightBeige,
-    borderRadius: 10,
-    paddingVertical: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  googleButtonText: {
-    color: colors.textDark,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  confirmCard: {
-    backgroundColor: colors.lightBeige,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  confirmText: {
-    fontSize: 14,
-    color: colors.textDark,
-    marginBottom: 12,
-  },
-  confirmStrong: {
-    fontWeight: '700',
-  },
-  fieldLabel: {
-    fontSize: 12,
-    color: colors.warmGray,
-    marginBottom: 4,
-  },
-  confirmButtonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  confirmButtonYes: {
-    flex: 1,
-    backgroundColor: colors.terracotta,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  confirmButtonNo: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  confirmButtonText: {
-    color: colors.white,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  confirmButtonTextNo: {
-    color: colors.textDark,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  manualInput: {
-    backgroundColor: colors.white,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 13,
-    color: colors.textDark,
-    marginBottom: 10,
-  },
-  savedNotice: {
-    fontSize: 13,
-    color: colors.terracotta,
-    fontWeight: '600',
-  },
-});
+const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:46},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});
