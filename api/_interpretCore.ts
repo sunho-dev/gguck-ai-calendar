@@ -102,8 +102,9 @@ function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): str
 }
 
 // gemini-2.5-flash는 신규 사용자에게 더 이상 제공되지 않음(404).
-// Google API가 실제 에러 메시지로 직접 안내한 후속 모델(gemini-3.6-flash, 무료 티어)로 사용.
-const MODEL = 'gemini-3.6-flash'
+// gemini-3.6-flash는 동작은 하지만 장소 추출/캐주얼한 문장 이해 품질이 낮아
+// 더 상위 버전인 gemini-3.8-flash(무료 티어)로 사용.
+const MODEL = 'gemini-3.8-flash'
 
 export async function interpretEventText(
   text: string,
