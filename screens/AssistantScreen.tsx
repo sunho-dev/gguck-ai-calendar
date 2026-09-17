@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { categoryPalette, colors } from '../constants/colors';
 import { interpretEvent, type InterpretedEvent } from '../utils/interpretEvent';
@@ -8,6 +8,7 @@ import { getCategories, saveCategory } from '../utils/categoryStore';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 import { generateEventId } from '../utils/quickEntry';
 import { check, type CheckResult } from '../utils/ruleCheck';
+import { buildGoogleCalendarLink } from '../utils/googleCalendarLink';
 import type { Category, Event } from '../types/schema';
 
 type PlaceStep =
@@ -32,6 +33,7 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
   const [categoryInput, setCategoryInput] = useState('');
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [registeredEventId, setRegisteredEventId] = useState<string | null>(null);
+  const [registeredEvent, setRegisteredEvent] = useState<Event | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [pendingNewCategory, setPendingNewCategory] = useState<string | null>(null);
   const [blockResult, setBlockResult] = useState<CheckResult | null>(null);
@@ -51,6 +53,7 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
     setSavedNotice(null);
     setPlaceStep({ kind: 'none' });
     setRegisteredEventId(null);
+    setRegisteredEvent(null);
     setPendingNewCategory(null);
     setBlockResult(null);
     try {
@@ -118,6 +121,7 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
   const saveEvent = (newEvent: Event) => {
     saveStoredEvents([...(loadStoredEvents() ?? []), newEvent]);
     setRegisteredEventId(newEvent.id);
+    setRegisteredEvent(newEvent);
     setBlockResult(null);
   };
 
@@ -144,6 +148,12 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
     if (!registeredEventId) return;
     saveStoredEvents((loadStoredEvents() ?? []).filter((e) => e.id !== registeredEventId));
     setRegisteredEventId(null);
+    setRegisteredEvent(null);
+  };
+
+  const openInGoogleCalendar = () => {
+    if (!registeredEvent) return;
+    Linking.openURL(buildGoogleCalendarLink(registeredEvent));
   };
 
   const pickColorForNewCategory = async (color: string) => {
@@ -287,10 +297,15 @@ export function AssistantScreen({ initialText = '', autoRun = false, onInitialTe
           <Text style={styles.resultConfidence}>확신도: {result.confidence}</Text>
 
           {registeredEventId ? (
-            <View style={styles.registerRow}>
-              <Text style={styles.registeredText}>✓ 일정에 등록했어요</Text>
-              <Pressable onPress={undoRegister}>
-                <Text style={styles.undoText}>되돌리기</Text>
+            <View>
+              <View style={styles.registerRow}>
+                <Text style={styles.registeredText}>✓ 일정에 등록했어요</Text>
+                <Pressable onPress={undoRegister}>
+                  <Text style={styles.undoText}>되돌리기</Text>
+                </Pressable>
+              </View>
+              <Pressable style={styles.googleButton} onPress={openInGoogleCalendar}>
+                <Text style={styles.googleButtonText}>구글 캘린더에도 추가</Text>
               </Pressable>
             </View>
           ) : blockResult ? (
@@ -539,6 +554,20 @@ const styles = StyleSheet.create({
     color: colors.warmGray,
     fontSize: 13,
     textDecorationLine: 'underline',
+  },
+  googleButton: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.lightBeige,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  googleButtonText: {
+    color: colors.textDark,
+    fontSize: 12,
+    fontWeight: '600',
   },
   confirmCard: {
     backgroundColor: colors.lightBeige,

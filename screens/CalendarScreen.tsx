@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
@@ -23,6 +23,7 @@ import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 import { getCategories } from '../utils/categoryStore';
 import { check } from '../utils/ruleCheck';
+import { buildGoogleCalendarLink } from '../utils/googleCalendarLink';
 import { downloadIcsForEvent } from '../utils/ics';
 
 interface ResolvedEntry {
@@ -443,6 +444,13 @@ export function CalendarScreen() {
                 <Text style={styles.deleteButtonText}>×</Text>
               </Pressable>
               <View style={styles.secondaryButtonRow}>
+                <Pressable
+                  testID={`gcal-${item.id}`}
+                  onPress={() => Linking.openURL(buildGoogleCalendarLink(item))}
+                  style={styles.icsButton}
+                >
+                  <Text style={styles.icsButtonText}>구글</Text>
+                </Pressable>
                 {Platform.OS === 'web' ? (
                   <Pressable
                     testID={`ics-${item.id}`}
