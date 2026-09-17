@@ -101,7 +101,10 @@ function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): str
   return lines.join('\n')
 }
 
-const MODEL = 'gemini-2.5-flash' // 무료 티어 대상 Flash 모델. 더 최신 Flash 모델이 나오면 이 값만 바꾸면 됨.
+// gemini-2.5-flash는 신규 사용자에게 더 이상 제공되지 않음(404).
+// gemini-3.6-flash는 추출 품질이 불안정, gemini-3.8-flash는 무료 티어 수요 폭주로 503.
+// 중간 안정 버전인 gemini-3.5-flash로 시도.
+const MODEL = 'gemini-3.5-flash'
 
 export async function interpretEventText(
   text: string,
