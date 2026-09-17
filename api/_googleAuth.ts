@@ -10,6 +10,7 @@ const redis = new Redis({
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 const USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v2/userinfo'
+const REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 
 // types/schema.ts GoogleAccount 주석에서 이미 정한 scope. 이벤트 단위로 좁혀서
 // 구글의 "민감 범위" 심사(캘린더 전체 접근보다 완화된 경로)를 피한다.
@@ -51,6 +52,17 @@ export async function saveGoogleAccount(account: StoredGoogleAccount): Promise<v
 
 export async function deleteGoogleAccount(userId: string): Promise<void> {
   await redis.del(kvKey(userId))
+}
+
+// 구글 쪽에도 "gguck" 앱 접근 권한을 취소해서, 우리 저장소를 지우는 것에 그치지 않고
+// 실제로 연결이 끊어지게 한다. 이미 취소됐거나 만료된 토큰이면 구글이 400을 줄 수 있는데,
+// 어차피 우리 목적(연결 해제)은 달성된 상태이므로 에러로 취급하지 않는다.
+export async function revokeGoogleToken(token: string): Promise<void> {
+  await fetch(REVOKE_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token }),
+  }).catch(() => {})
 }
 
 export function getRedirectUri(): string {
