@@ -22,6 +22,14 @@ export function startGoogleConnect(): void {
   }
 }
 
+export async function disconnectGoogle(): Promise<void> {
+  try {
+    await fetch(`/api/auth/google-disconnect?userId=${getAnonUserId()}`, { method: 'POST' })
+  } catch (err) {
+    console.warn('[google-sync] 연동 해제 실패:', err)
+  }
+}
+
 export async function syncEventCreate(event: Event): Promise<string | null> {
   return postSync({ action: 'create', event: toPayload(event) })
 }

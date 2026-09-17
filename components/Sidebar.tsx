@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../constants/colors';
-import { startGoogleConnect } from '../utils/googleSync';
+import { disconnectGoogle, startGoogleConnect } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { AppLogo } from './AppLogo';
 import { GlossyBox } from './GlossyBox';
@@ -27,6 +27,11 @@ export function Sidebar({
 }) {
   const googleStatus = useGoogleSyncStatus();
   const alertCount=useStoredEvents().filter(e=>!e.cancelledAt).length;
+
+  const handleDisconnect = async () => {
+    await disconnectGoogle();
+    window.location.reload();
+  };
 
   return (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
@@ -88,7 +93,16 @@ export function Sidebar({
           <View style={styles.googleTextGroup}>
             <Text style={styles.googleTitle}>Google Calendar</Text>
             <Text style={styles.googleSubtitle}>
-              {googleStatus.connected ? `연동됨 · ${googleStatus.email}` : '미연결 · 눌러서 연동'}
+              {googleStatus.connected ? (
+                <>
+                  {`연동됨 · ${googleStatus.email} · `}
+                  <Text onPress={handleDisconnect} style={styles.googleDisconnectLink}>
+                    다시 눌러서 취소
+                  </Text>
+                </>
+              ) : (
+                '미연결 · 눌러서 연동'
+              )}
             </Text>
           </View>
         )}
@@ -194,5 +208,8 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.warmGray,
     marginTop: 1,
+  },
+  googleDisconnectLink: {
+    textDecorationLine: 'underline',
   },
 });
