@@ -82,10 +82,13 @@ export function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[
 }
 
 // gemini-2.5-flash는 신규 사용자에게 더 이상 제공되지 않음(404).
-// gemini-3.6-flash는 추출 품질이 불안정, gemini-3.8-flash는 무료 티어 수요 폭주로 503,
-// gemini-3.5-flash는 무료 할당량이 하루 20건뿐이라 금방 소진됨(429).
-// gemini-3.1-flash-lite는 하루 약 500건으로 훨씬 넉넉해서 실사용에 적합.
-export const MODEL = 'gemini-3.1-flash-lite'
+// gemini-3.8-flash는 무료 티어 수요 폭주로 503, gemini-3.5-flash는 무료 할당량이
+// 하루 20건뿐이라 금방 소진됨(429). gemini-3.1-flash-lite는 할당량은 넉넉하지만
+// (하루 약 500건) "lite" 모델이라 복잡한 시스템 프롬프트 지시를 잘 안 따름 —
+// 한국어 텍스트 깨짐(mojibake) + 정확히 일치하는 개인 별칭도 무시하고 장소를
+// 지어내는 환각이 실사용 테스트에서 재현됨(2026-09-18). gemini-3.6-flash가
+// 품질/지시 준수 면에서 가장 안정적이라 이걸로 고정한다.
+export const MODEL = 'gemini-3.6-flash'
 
 export async function interpretEventText(
   text: string,
