@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
@@ -21,6 +21,7 @@ import { interpretEvent } from '../utils/interpretEvent';
 import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
+import { downloadIcsForEvent } from '../utils/ics';
 
 interface ResolvedEntry {
   title: string;
@@ -440,9 +441,20 @@ export function CalendarScreen() {
               >
                 <Text style={styles.deleteButtonText}>×</Text>
               </Pressable>
-              <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
-                <Text style={styles.editButtonText}>수정</Text>
-              </Pressable>
+              <View style={styles.secondaryButtonRow}>
+                {Platform.OS === 'web' ? (
+                  <Pressable
+                    testID={`ics-${item.id}`}
+                    onPress={() => downloadIcsForEvent(item)}
+                    style={styles.icsButton}
+                  >
+                    <Text style={styles.icsButtonText}>.ics</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
+                  <Text style={styles.editButtonText}>수정</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         )}
@@ -672,6 +684,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 16,
   },
+  secondaryButtonRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
   editButton: {
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -679,6 +695,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lightBeige,
   },
   editButtonText: {
+    color: colors.textDark,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  icsButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: colors.lightBeige,
+  },
+  icsButtonText: {
     color: colors.textDark,
     fontSize: 12,
     fontWeight: '600',
