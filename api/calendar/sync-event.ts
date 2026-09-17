@@ -10,7 +10,7 @@ interface SyncEventPayload {
   endDate: string
   time: string
   durationMin: number
-  place: { name: string; address: string } | null
+  place: { name: string; address: string | null } | null
 }
 
 interface SyncRequestBody {
@@ -83,7 +83,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       summary: body.event.title,
       start: { dateTime: toRfc3339(body.event.startDate, body.event.time), timeZone: 'Asia/Seoul' },
       end: { dateTime: toRfc3339(endDate, endTime), timeZone: 'Asia/Seoul' },
-      location: body.event.place ? `${body.event.place.name} ${body.event.place.address}`.trim() : undefined,
+      location: body.event.place
+        ? [body.event.place.name, body.event.place.address].filter(Boolean).join(' ')
+        : undefined,
     }
 
     const isUpdate = body.action === 'update' && Boolean(body.googleEventId)
