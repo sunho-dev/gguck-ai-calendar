@@ -310,6 +310,18 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
     setErrorMessage(null);
   };
 
+  const handleDelete = (event: Event) => {
+    setEvents((prev) => prev.filter((e) => e.id !== event.id));
+    if (editingId === event.id) {
+      resetEntry();
+    }
+    if (googleStatus.connected && event.googleEventId) {
+      runGoogleSync(() => syncEventDelete(event)).catch((err) => {
+        console.warn('[calendar] 구글 캘린더 삭제 동기화 실패:', err);
+      });
+    }
+  };
+
 
   return (
     <View style={styles.page}>
@@ -513,6 +525,9 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
               </Text>
             </View>
             <View style={styles.eventCardActions}>
+              <Pressable testID={`delete-${item.id}`} onPress={() => handleDelete(item)} style={styles.deleteButton}>
+                <Text style={styles.deleteButtonText}>×</Text>
+              </Pressable>
               <View style={styles.secondaryButtonRow}>
                 <Pressable
                   testID={`gcal-${item.id}`}
