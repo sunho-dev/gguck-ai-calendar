@@ -742,6 +742,7 @@ const styles = StyleSheet.create({
   },
   quickAddInput: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: colors.white,
     borderRadius: 10,
     paddingVertical: 10,

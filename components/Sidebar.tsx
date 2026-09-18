@@ -106,6 +106,11 @@ export function Sidebar({
             </Text>
           </View>
         )}
+        {compact && (
+          <Text style={styles.googleCompactStatus} numberOfLines={1}>
+            {googleStatus.connected ? '연동됨' : '미연결'}
+          </Text>
+        )}
       </Pressable>
     </View>
   );
@@ -180,8 +185,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   googleRowCompact: {
+    flexDirection: 'column',
     justifyContent: 'center',
     paddingHorizontal: 0,
+    gap: 3,
   },
   googleIcon: {
     width: 26,
@@ -211,5 +218,10 @@ const styles = StyleSheet.create({
   },
   googleDisconnectLink: {
     textDecorationLine: 'underline',
+  },
+  googleCompactStatus: {
+    fontSize: 9,
+    color: colors.warmGray,
+    textAlign: 'center',
   },
 });
