@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { ApiError } from '@google/genai'
 import { InterpretRefusedError } from './_interpretCore'
 import { interpretBulkImage, interpretBulkTable, type BulkDraftEvent } from './_bulkInterpretCore'
 
@@ -67,6 +68,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
     console.error('[interpret-bulk] 오류:', err)
+    if (err instanceof ApiError && err.status === 503) {
+      res.status(503).json({ error: 'AI 서버가 혼잡합니다. 잠시 후 다시 시도해주세요.' } satisfies ErrorBody)
+      return
+    }
+    if (err instanceof ApiError && err.status === 429) {
+      res.status(429).json({ error: '오늘의 AI 무료 사용량을 다 썼어요. 내일 다시 시도해주세요.' } satisfies ErrorBody)
+      return
+    }
     const detail = err instanceof Error ? err.message.slice(0, 300) : undefined
     res.status(502).json({ error: 'AI 해석 중 오류가 발생했습니다.', detail } satisfies ErrorBody)
   }
