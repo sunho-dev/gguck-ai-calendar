@@ -97,6 +97,12 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   setImportDrafts(null);
   setNotice(`가져온 일정 ${created.length}개를 등록했어요.`);
   if(created[0])setSelectedDate(created[0].startDate);
+
+  const status=await getGoogleSyncStatus();
+  if(!status.connected)return;
+  let synced=0;
+  for(const e of created){const id=await syncEventCreate(e);if(id){synced++;saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}}
+  setNotice(`로컬 ${created.length}개 등록 · Google ${synced}개 반영${synced<created.length?' · 일부 동기화 실패: Google 캘린더를 확인해 주세요.':''}`);
  };
  useScheduleStaging(async({text:input})=>{
   if(lock.current||draft||target||cancelChoices.length)throw Error('현재 확인 중인 요청을 먼저 마쳐 주세요.');
