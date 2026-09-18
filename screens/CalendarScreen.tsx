@@ -266,7 +266,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
         resetEntry();
         return;
       }
-      const updated: Event = { ...existing, ...resolved, startDate: selectedDate, endDate: selectedDate };
+      const updated: Event = { ...existing, ...resolved, ruleExceptions:[], startDate: selectedDate, endDate: selectedDate };
       const verdict=check(toSchedule(updated),events.map(toSchedule),loadRules());
       if(!verdict.ok){setErrorMessage(verdict.reasons.map(r=>r.message).join(' '));return;}
       setEvents((prev) => prev.map((event) => (event.id === editingId ? updated : event)));

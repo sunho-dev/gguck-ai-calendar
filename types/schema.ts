@@ -22,6 +22,8 @@ export interface Event {
   aliasTerm?: string
   aliasMeaning?: string
   cancelledAt?: string
+  ruleExceptions?: string[]
+  reminderMessage?: string
 }
 
 /**

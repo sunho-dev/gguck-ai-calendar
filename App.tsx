@@ -11,6 +11,7 @@ import { AssistantScreen } from './screens/AssistantScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { RulesScreen } from './screens/RulesScreen';
 import { AlertsScreen } from './screens/AlertsScreen';
+import {ReminderSync} from './components/ReminderSync';
 
 const PLACEHOLDER_TITLES: Record<Exclude<NavKey, 'calendar' | 'assistant'>, string> = {
   rules: '나의 규칙',
@@ -50,6 +51,7 @@ export default function App() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <StatusBar style="dark" />
         <GoogleConnectBanner />
+        <ReminderSync />
         <View style={styles.shell}>
           <Sidebar active={activeNav} onSelect={setActiveNav} compact={compactSidebar} />
           <View style={styles.main}>

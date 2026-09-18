@@ -6,7 +6,7 @@ import {useRef,useState} from 'react';
 import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,Switch,useWindowDimensions} from 'react-native';
 import {AgendaPreview} from '../components/AgendaPreview';
 import DateTimeField from '../components/DateTimeField';
-import {ImportReviewList} from '../components/ImportReviewList';
+import {RuleAwareImportReview} from '../components/RuleAwareImportReview';
 import {Choice,RepeatChoices,RepeatFields,recurrenceFor,type RepeatMode} from '../components/ScheduleControls';
 import {useScheduleStaging} from '../utils/useScheduleStaging';
 import {colors} from '../constants/colors';
@@ -16,7 +16,7 @@ import {getPlaceAliases,savePlaceAlias} from '../utils/placeAliasStore';
 import {loadStoredEvents,saveStoredEvents} from '../utils/eventsStorage';
 import {getGoogleSyncStatus,syncEventCreate,syncEventDelete} from '../utils/googleSync';
 import {categoryKey,loadRules,toEvent,toSchedule} from '../utils/scheduleAdapter';
-import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,type Schedule,type Category} from '../utils/scheduler';
+import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,matchesRule,reminderFor,type Schedule,type Category} from '../utils/scheduler';
 import {generateEventId} from '../utils/quickEntry';
 import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
 import {interpretBulkImage,interpretBulkTable} from '../utils/bulkInterpret';
@@ -87,12 +87,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    setImportSource('사진에서 찾은 일정');setImportDrafts(drafts);
   }catch(err){setIsImporting(false);console.warn('[photo-import] 실패:',err);setImportError(err instanceof Error?err.message:'사진을 처리하는 데 실패했어요.');}
  };
- const handleConfirmImport=async(selected:ImportedEventDraft[])=>{
-  const created:Event[]=selected.map(draft=>({
-   id:generateEventId(),userId:'local',title:draft.title,category:'personal',
-   startDate:draft.startDate,endDate:draft.startDate,time:draft.time,durationMin:draft.durationMin,
-   place:draft.place?{...draft.place,lat:0,lng:0}:null,remindMin:0,bufferMin:0,createdFrom:'paste',sharedWith:[],
-  }));
+ const handleConfirmImport=async(created:Event[])=>{
   saveStoredEvents([...all(),...created]);
   setImportDrafts(null);
   setNotice(`가져온 일정 ${created.length}개를 등록했어요.`);
@@ -117,15 +112,18 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  async function guarded(job:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setFailure('');try{await job();}catch(e){setFailure(e instanceof Error?e.message:'처리하지 못했어요.');}finally{lock.current=false;setBusy(false);}}
  async function persist(schedules:Schedule[]){
   const rules=loadRules(),seriesId=schedules[0]?.recurrence?`series-${Date.now()}`:undefined;
+  const previous=all().map(toSchedule);const warningMessages=new Set<string>();
+  for(const s of schedules){check(s,previous,rules).warnings?.forEach(r=>warningMessages.add(r.message));previous.push(s);}
+  const warningText=warningMessages.size?' · 참고: '+[...warningMessages].join(' / '):'';
   const created=schedules.map(s=>toEvent({...s,seriesId},rules));
   saveStoredEvents([...all(),...created]);
   setSelectedDate(created[0].startDate);
   setDraft(null);setIssues([]);setChoices([]);setSkipped([]);setText('');
-  setNotice(`‘${created[0].title}’ ${created.length}개 등록 완료 · ${created[0].startDate} ${created[0].time} · 알림 ${created[0].remindMin}분 전`);
+  setNotice(`‘${created[0].title}’ ${created.length}개 등록 완료 · ${created[0].startDate} ${created[0].time} · 알림 ${created[0].remindMin}분 전${warningText}`);
   const status=await getGoogleSyncStatus();if(!status.connected)return;
   let synced=0;
   for(const e of created){const id=await syncEventCreate(e);if(id){synced++;saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}}
-  setNotice(`로컬 ${created.length}개 등록 · Google ${synced}개 반영${synced<created.length?' · 일부 동기화 실패: Google 캘린더를 확인해 주세요.':''}`);
+  setNotice(`로컬 ${created.length}개 등록 · Google ${synced}개 반영${synced<created.length?' · 일부 동기화 실패: Google 캘린더를 확인해 주세요.':''}${warningText}`);
  }
  async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
   setChoices([]);setIssues([]);
@@ -139,6 +137,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   }
   const verdict=check(s,events,rules);
   if(!verdict.ok){setDraft(s);setIssues(verdict.reasons.map(r=>r.message));setChoices(alternatives(s,events,rules));return;}
+  if(!confirmed&&!rules.auto&&!(rules.items||[]).some(r=>r.type==='auto'&&matchesRule(s,r))){setDraft(s);return;}
   await persist([s]);
  }
  async function cancel(t:Schedule,range:Scope){
@@ -179,10 +178,13 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  });}
  const field=(label:string,value:string,change:(s:string)=>void)=><View><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} style={styles.input} value={value} onChangeText={change} editable={!busy}/></View>;
  const button=(label:string,onPress:()=>void,secondary=false,disabled=false)=><Pressable accessibilityRole="button" disabled={busy||disabled} onPress={onPress} style={[styles.button,secondary&&styles.secondary,(busy||disabled)&&{opacity:.5}]}><Text style={{color:secondary?colors.textDark:colors.white}}>{label}</Text></Pressable>;
- const patch=(p:Partial<Schedule>)=>{if(draft){setDraft({...draft,...p});setChoices([]);setIssues([]);setSkipped([]);}};
+ const patch=(p:Partial<Schedule>)=>{if(draft){setDraft({...draft,ruleExceptions:[],...p});setChoices([]);setIssues([]);setSkipped([]);}};
  const recurrencePlan=draft?.recurrence?planSeries(draft,all().map(toSchedule),loadRules(),skipped):null;
  const liveVerdict=draft&&!draft.recurrence&&!draft.ambiguous?check(draft,all().map(toSchedule),loadRules()):null;
  const liveChoices=draft&&liveVerdict&&!liveVerdict.ok?alternatives(draft,all().map(toSchedule),loadRules()):[];
+ const exceptionReasons=recurrencePlan?recurrencePlan.conflicts.flatMap(c=>c.reasons):(liveVerdict?.reasons||[]).filter(r=>r.action!=='warn');
+ const canExcept=exceptionReasons.length>0&&exceptionReasons.every(r=>r.overridable&&r.ruleId);
+ async function acceptExceptions(){if(!draft||!canExcept)return;await guarded(()=>proceed({...draft,ruleExceptions:[...new Set([...(draft.ruleExceptions||[]),...exceptionReasons.map(r=>r.ruleId!)])]},true));}
  return <ScrollView style={styles.page} contentContainerStyle={{paddingBottom:40}}><Text style={styles.heading}>일정은 꾹에게 맡겨요.</Text><Text style={styles.label}>한 줄로 남기면, 시간과 규칙을 함께 살펴볼게요.</Text>
  <View style={[styles.columns,wide&&{flexDirection:'row'}]}><View style={{flex:wide?1.35:undefined,minWidth:0}}><View style={styles.panel}><Text style={styles.sectionTitle}>어떤 일정이 있나요?</Text>
  <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder="내일 오후 8시 집에서 운동" editable={!busy}/>
@@ -195,7 +197,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {!importDrafts&&<View style={styles.row}>{button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}{button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}{button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}</View>}
  {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
  {!!importError&&<Text style={styles.notice}>{importError}</Text>}
- {importDrafts&&<ImportReviewList title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={selected=>void handleConfirmImport(selected)} onCancel={()=>setImportDrafts(null)}/>}
+ {importDrafts&&<RuleAwareImportReview title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={handleConfirmImport} onCancel={()=>setImportDrafts(null)}/>}
  </View>}
  <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
  <View style={styles.panel}><Text style={styles.sectionTitle}>말 한마디가 일정이 되는 순간.</Text><Text style={styles.label}>등록도 취소도 한 문장으로. 일정은 이 브라우저에 저장돼요.</Text></View></View>
@@ -211,7 +213,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {button('원문 그대로 계속',()=>{setUnknown(null);void guarded(()=>proceed(draft));},true)}
  </>:draft?<>
  <Text style={styles.sectionTitle}>{draft.ambiguous?'오전일까요, 오후일까요?':draft.recurrence?'언제까지 함께할까요?':liveVerdict&&!liveVerdict.ok?'이 시간은 조정이 필요해요.':'일정 확인'}</Text>
- <Text style={styles.label}>{draft.title} · {draft.duration}분 · {categories[draft.category]} · 알림 {loadRules().reminders[draft.category]}분 전</Text>
+ <Text style={styles.label}>{draft.title} · {draft.duration}분 · {categories[draft.category]} · 알림 {reminderFor(draft,loadRules()).minutes}분 전</Text>
  {field('제목',draft.title,title=>patch({title}))}<Text style={styles.label}>{draft.recurrence?'반복 시작일':'날짜'}</Text><DateTimeField label="일정 날짜" kind="date" value={draft.date} onChange={date=>patch({date})} disabled={busy}/><Text style={styles.label}>시간 (24시간제)</Text><DateTimeField label="일정 시간" kind="time" value={draft.time} onChange={time=>patch({time,ambiguous:false})} disabled={busy}/>
  {draft.ambiguous&&<View style={styles.row}>{[0,12].map(n=><View key={n}>{button((n?'오후':'오전')+(draft.recurrence?' 선택':'로 등록'),()=>{const resolved={...draft,time:String(Number(draft.time.slice(0,2))%12+n).padStart(2,'0')+draft.time.slice(2),ambiguous:false};if(draft.recurrence)patch(resolved);else void guarded(()=>proceed(resolved));},true)}</View>)}</View>}
  {field('소요 시간 (분)',String(draft.duration),v=>patch({duration:Number(v)}))}
@@ -225,6 +227,8 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {issues.map((message,i)=><Text key={i} style={styles.notice}>{message}</Text>)}
  {liveVerdict&&!liveVerdict.ok&&liveVerdict.reasons.map((r,i)=><Text key={i} style={styles.notice}>{r.message}</Text>)}
  {liveChoices.map(c=><View key={c.date+c.time}>{button(`${c.date} ${c.time}로 등록`,()=>void guarded(()=>proceed(c,true)),true)}</View>)}
+ {draft&&!draft.recurrence&&liveVerdict&&!liveVerdict.ok&&!liveChoices.length&&<Text style={styles.notice}>앞으로 14일 안에 모든 규칙을 만족하는 시간이 없어요. 규칙을 수정하거나 이번만 예외로 등록할 수 있어요.</Text>}
+ {canExcept&&button(draft.recurrence?'표시된 반복 회차의 규칙 위반을 허용하고 등록':'이번만 예외로 등록',()=>void acceptExceptions(),true,!!draft.ambiguous)}
  {button(draft.recurrence?`${recurrencePlan?.accepted.length||0}회 반복 일정 등록`:'확인하고 등록',()=>void guarded(()=>proceed(draft,true)),false,!!draft.ambiguous||!draft.title.trim()||!!(recurrencePlan&&(recurrencePlan.error||recurrencePlan.conflicts.length||!recurrencePlan.accepted.length))||!!(liveVerdict&&!liveVerdict.ok))}
  </>:target?<>
  <Text>{target.title} · {target.date} {target.time}</Text><Text>어느 범위를 취소할까요?</Text>
