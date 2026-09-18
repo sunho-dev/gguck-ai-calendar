@@ -1,0 +1,45 @@
+{
+  "name": "gguck",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~57.0.15",
+    "@google/genai": "^2.22.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@upstash/redis": "^1.38.4",
+    "expo": "~57.0.23",
+    "expo-document-picker": "~57.0.2",
+    "expo-image-manipulator": "~57.0.18",
+    "expo-image-picker": "~57.0.18",
+    "expo-linear-gradient": "~57.0.2",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-web": "^0.21.2",
+    "xlsx": "^0.18.5",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "@vercel/node": "^13.0.1",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.3",
+    "@types/web-push": "^3.6.4"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "test:interpret": "tsx scripts/test-interpret.ts",
+    "test": "node --test tests/scheduler/*.test.js && node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "expo export -p web && node scripts/postexport.mjs"
+  },
+  "private": true
+}

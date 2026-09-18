@@ -1,0 +1,2 @@
+import type {DateTimeFieldProps} from './DateTimeField';
+export default function DateTimeField({label,value,onChange,kind,disabled}:DateTimeFieldProps){return <input aria-label={label} type={kind} value={value} disabled={disabled} onChange={e=>onChange(e.target.value)} style={{width:'100%',boxSizing:'border-box',padding:12,borderRadius:10,border:'1px solid #E4D3C2',color:'#4A3F38',background:'#fff',font:'inherit'}}/>;}
