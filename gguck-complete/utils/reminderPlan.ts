@@ -4,7 +4,10 @@ export const reminderMessages:Record<string,string>={exercise:'운동복과 물�
 export function buildReminderPlan(events:Event[],now=Date.now()):PushJob[]{
  return events.filter(e=>!e.cancelledAt).flatMap(e=>{
   const start=Date.parse(`${e.startDate}T${e.time}:00+09:00`),at=start-e.remindMin*60000;
-  if(!Number.isFinite(at)||!Number.isFinite(e.remindMin)||e.remindMin<0||start<=now)return [];
-  return [{id:`${e.id}:${at}`,at,expires:start+Math.max(1,e.durationMin)*60000,title:e.title,body:e.reminderMessage||reminderMessages[e.category]||reminderMessages.personal}];
+  // Keep a short grace period so sync at event start cannot erase an unsent
+  // zero-minute reminder before the server scheduler has had time to run.
+  const expires=start+Math.min(15,Math.max(1,e.durationMin))*60000;
+  if(!Number.isFinite(at)||!Number.isFinite(expires)||!Number.isFinite(e.remindMin)||e.remindMin<0||expires<=now)return [];
+  return [{id:`${e.id}:${at}`,at,expires,title:e.title,body:e.reminderMessage||reminderMessages[e.category]||reminderMessages.personal}];
  }).sort((a,b)=>a.at-b.at);
 }

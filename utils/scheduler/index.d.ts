@@ -9,6 +9,8 @@ export interface Rules {gap:number;exerciseEnd:number;weekendWork:boolean;auto:b
 export const actionLabels:Record<RuleAction,string>;
 export function validateRule(input:unknown):PersonalRule;
 export function parseRule(text:string):PersonalRule;
+export function assertPermanentRule(text:string):void;
+export const PERIOD_RULE_MESSAGE:string;
 export function describeRule(rule:PersonalRule):string;
 export function matchesRule(event:Schedule,rule:PersonalRule):boolean;
 export function reminderFor(event:Schedule,rules:Rules):{minutes:number;message:string};

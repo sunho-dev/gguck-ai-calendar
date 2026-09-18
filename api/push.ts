@@ -54,8 +54,18 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   try{
    const device=await redis.get<Device>('push:device:'+id);if(!device)return res.status(401).json({error:'이 기기의 알림을 다시 연결해 주세요.'});
    if(action==='disable'){await redis.del('push:device:'+id);await redis.zrem('push:due',id);return res.json({ok:true});}
+   if(action==='subscription'){
+    const subscription=validateSubscription(req.body?.subscription);
+    await redis.set('push:device:'+id,{...device,subscription},{ex:370*86400});
+    return res.json({ok:true});
+   }
    if(action==='sync'){
-    const jobs=validateJobs(req.body?.jobs);await redis.set('push:device:'+id,{...device,jobs},{ex:370*86400});
+    const candidates=validateJobs(req.body?.jobs);
+    // Do not requeue already delivered reminders on every client sync.
+    const pipeline=redis.pipeline();
+    for(const job of candidates)pipeline.exists('push:sent:'+hash(id+job.id));
+    const delivered=candidates.length?await pipeline.exec<number[]>():[];
+    const jobs=candidates.filter((_,index)=>!delivered[index]);await redis.set('push:device:'+id,{...device,jobs},{ex:370*86400});
     if(jobs.length)await redis.zadd('push:due',{score:Math.min(...jobs.map(j=>j.at)),member:id});else await redis.zrem('push:due',id);
     return res.json({ok:true,count:jobs.length});
    }

@@ -3,11 +3,20 @@ const dateNumber=d=>Date.parse(d+'T00:00:00+09:00')/86400000;
 const start=e=>Date.parse(e.date+'T'+e.time+':00+09:00');
 export const ruleTypes=['rest','weeklyLimit','timeBlock','weekdayBlock','reminder','auto'];
 export const actionLabels={warn:'알려만 주기',confirm:'확인 후 등록',suggest:'대안 제안'};
+export const PERIOD_RULE_MESSAGE='기간이 정해진 규칙은 아직 지원하지 않아요. 매주 반복하거나 계속 적용할 규칙을 입력해 주세요. 예: 클라이밍 주 3회 이하';
+export function assertPermanentRule(text){
+ // Inspect the condition, not quoted reminder payloads such as "내일 병원".
+ const s=String(text).split(/(?:준비물|메시지)\s*[:：]/)[0].replace(/\s+/g,'');
+ const duration=/(?:\d+(?:일|주일?|개월|달|년)|일주일|한주|두주|세주|한달|두달|하루|이틀|사흘)(?:간|동안|만)/;
+ const anchored=/(?:이번|다음|금|금번)(?:주|달|월)|오늘|내일|모레|당분간|잠시|임시|\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d+월\d+일|\d+일까지|[월화수목금토일]요일(?:까지|부터)/;
+ if(duration.test(s)||anchored.test(s))throw Object.assign(Error(PERIOD_RULE_MESSAGE),{code:'PERIOD_RULE_UNSUPPORTED'});
+}
 export function validateRule(input){
  const r=JSON.parse(JSON.stringify(input));
  if(!r||!ruleTypes.includes(r.type)||!['warn','confirm','suggest'].includes(r.action)||typeof r.text!=='string'||r.text.length>300)throw Error('규칙 종류와 동작을 확인해 주세요.');
  if(!['all','exercise','work','study','personal','health'].includes(r.category))throw Error('카테고리를 확인해 주세요.');
  if(typeof r.keyword!=='string'||r.keyword.length>50)throw Error('대상 표현은 50자 이내로 적어 주세요.');
+ assertPermanentRule(r.text);
  const p=r.params||{},integer=(v,min,max)=>Number.isInteger(v)&&v>=min&&v<=max;
  if(r.type==='rest'&&!integer(p.days,1,7))throw Error('휴식은 1~7일로 설정해 주세요.');
  if(r.type==='weeklyLimit'&&!integer(p.count,1,30))throw Error('주간 횟수는 1~30회로 설정해 주세요.');
@@ -44,6 +53,7 @@ export function policyReasons(e,events,items=[]){
 }
 export function reminderFor(e,rules){const r=(rules.items||[]).filter(r=>r.type==='reminder'&&matchesRule(e,r)).at(-1);return {minutes:r?r.params.minutes:rules.reminders[e.category],message:r?.params.message||''};}
 export function parseRule(text){
+ assertPermanentRule(text);
  const s=text.trim();if(!s||s.length>300)throw Error('규칙은 1~300자로 적어 주세요.');
  if(/하지\s*마|않아도|아니|또는|거나/.test(s))throw Error('조건을 하나씩 적어 주세요. 예: 운동 다음 날은 쉬기');
  const action=/알려|경고/.test(s)?'warn':/확인|물어/.test(s)?'confirm':'suggest';
