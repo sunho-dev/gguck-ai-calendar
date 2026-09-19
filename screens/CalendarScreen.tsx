@@ -25,6 +25,7 @@ import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/goog
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { mergeGoogleEvents, pullGoogleEvents } from '../utils/googlePull';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
+import { loadShiftColors, type ShiftType } from '../utils/shiftColorStore';
 
 interface ResolvedEntry {
   title: string;
@@ -142,6 +143,9 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   const today = useMemo(() => todayISODate(), []);
   const googleStatus = useGoogleSyncStatus();
   const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? []);
+  const [shiftColors] = useState(() => loadShiftColors());
+  const getCategoryColor = (category: string): string =>
+    shiftColors[category as ShiftType] ?? CATEGORY_COLOR[category] ?? colors.warmGray;
   const [selectedDate, setSelectedDate] = useState(today);
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [viewedMonth, setViewedMonth] = useState(() => startOfMonth(today));
@@ -182,8 +186,19 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i)), [today]);
   const monthGrid = useMemo(() => buildMonthGrid(viewedMonth), [viewedMonth]);
 
-  const hasEventsOn = (date: string) =>
-    events.some((event) => !event.cancelledAt && event.startDate <= date && event.endDate >= date);
+  const eventColorsOn = (date: string): string[] => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const event of events) {
+      if (event.cancelledAt || event.startDate > date || event.endDate < date) continue;
+      const color = getCategoryColor(event.category);
+      if (!seen.has(color)) {
+        seen.add(color);
+        result.push(color);
+      }
+    }
+    return result;
+  };
 
   const holidayName = HOLIDAYS[selectedDate];
   const eventsForDay = events
@@ -456,12 +471,19 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
                   {dayOfMonth(date)}
                 </Text>
               );
+              const dayColors = eventColorsOn(date);
               return (
                 <Pressable key={date} onPress={() => setSelectedDate(date)} style={styles.monthCell}>
                   <View style={[styles.monthCellCircle, selected && styles.monthCellCircleSelected]}>
                     {cellText}
                   </View>
-                  {hasEventsOn(date) ? <View style={styles.monthCellDot} /> : null}
+                  {dayColors.length > 0 && (
+                    <View style={styles.monthCellBlocks}>
+                      {dayColors.slice(0, 3).map((color, index) => (
+                        <View key={index} style={[styles.monthCellBlock, { backgroundColor: color }]} />
+                      ))}
+                    </View>
+                  )}
                 </Pressable>
               );
             })}
@@ -515,7 +537,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
         ListEmptyComponent={<Text style={styles.emptyText}>등록된 일정이 없어요.</Text>}
         renderItem={({ item }) => (
           <View
-            style={[styles.eventCard, { borderLeftColor: CATEGORY_COLOR[item.category] ?? colors.warmGray }]}
+            style={[styles.eventCard, { borderLeftColor: getCategoryColor(item.category) }]}
           >
             <View style={styles.eventCardBody}>
               <Text style={styles.eventCategory}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
@@ -705,7 +727,8 @@ const styles = StyleSheet.create({
   monthCell: {
     flexBasis: '14.28%',
     alignItems: 'center',
-    paddingVertical: 5,
+    paddingVertical: 10,
+    minHeight: 60,
   },
   monthCellCircle: {
     width: 28,
@@ -727,12 +750,16 @@ const styles = StyleSheet.create({
   monthCellTextOutside: {
     color: colors.lightBeige,
   },
-  monthCellDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.terracotta,
-    marginTop: 2,
+  monthCellBlocks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 2,
+    marginTop: 6,
+  },
+  monthCellBlock: {
+    width: 13,
+    height: 5,
+    borderRadius: 2.5,
   },
   quickAddRow: {
     flexDirection: 'row',

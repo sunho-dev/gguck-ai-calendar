@@ -6,6 +6,7 @@ import {useRef,useState} from 'react';
 import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,Switch,useWindowDimensions} from 'react-native';
 import {AgendaPreview} from '../components/AgendaPreview';
 import DateTimeField from '../components/DateTimeField';
+import {ColorDropdown} from '../components/ColorDropdown';
 import {ImportReviewList} from '../components/ImportReviewList';
 import {Choice,RepeatChoices,RepeatFields,recurrenceFor,type RepeatMode} from '../components/ScheduleControls';
 import {useScheduleStaging} from '../utils/useScheduleStaging';
@@ -21,6 +22,8 @@ import {generateEventId} from '../utils/quickEntry';
 import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
 import {interpretBulkImage,interpretBulkTable} from '../utils/bulkInterpret';
 import {loadMyName,saveMyName} from '../utils/myNameStorage';
+import {classifyShift} from '../utils/shiftClassify';
+import {SHIFT_TYPES,loadShiftColors,saveShiftColors,type ShiftColorMap} from '../utils/shiftColorStore';
 
 type Scope='one'|'following'|'all';
 export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;onRules?:()=>void;onCalendar?:()=>void}){
@@ -34,6 +37,12 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  const [cancelChoices,setCancelChoices]=useState<Schedule[]>([]),[target,setTarget]=useState<Schedule|null>(null),[scope,setScope]=useState<Scope>('one');
  const [importDrafts,setImportDrafts]=useState<ImportedEventDraft[]|null>(null),[importSource,setImportSource]=useState<string|null>(null);
  const [importError,setImportError]=useState<string|null>(null),[isImporting,setIsImporting]=useState(false),[myName,setMyName]=useState(()=>loadMyName());
+ const [shiftColors,setShiftColors]=useState<ShiftColorMap>(()=>loadShiftColors());
+ const handleShiftColorChange=(type:typeof SHIFT_TYPES[number],hex:string)=>{
+  const next={...shiftColors,[type]:hex};
+  setShiftColors(next);
+  saveShiftColors(next);
+ };
  const lock=useRef(false);
  const all=()=>loadStoredEvents()||[];
  const handleMyNameChange=(value:string)=>{setMyName(value);saveMyName(value);};
@@ -89,7 +98,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  };
  const handleConfirmImport=async(selected:ImportedEventDraft[])=>{
   const created:Event[]=selected.map(draft=>({
-   id:generateEventId(),userId:'local',title:draft.title,category:'personal',
+   id:generateEventId(),userId:'local',title:draft.title,category:classifyShift(draft.title)??'personal',
    startDate:draft.startDate,endDate:draft.startDate,time:draft.time,durationMin:draft.durationMin,
    place:draft.place?{...draft.place,lat:0,lng:0}:null,remindMin:0,bufferMin:0,createdFrom:'paste',sharedWith:[],
   }));
@@ -195,6 +204,10 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {!importDrafts&&<View style={styles.row}>{button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}{button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}{button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}</View>}
  {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
  {!!importError&&<Text style={styles.notice}>{importError}</Text>}
+ {importDrafts&&<View style={styles.shiftColorPanel}>
+ <Text style={styles.label}>근무 유형별 색을 정해두면 캘린더에서 한눈에 구분돼요.</Text>
+ {SHIFT_TYPES.map(type=><View key={type} style={styles.shiftColorRow}><Text style={styles.shiftColorLabel}>{type}</Text><ColorDropdown value={shiftColors[type]} onChange={hex=>handleShiftColorChange(type,hex)}/></View>)}
+ </View>}
  {importDrafts&&<ImportReviewList title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={selected=>void handleConfirmImport(selected)} onCancel={()=>setImportDrafts(null)}/>}
  </View>}
  <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
@@ -235,4 +248,4 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {!!failure&&<Text accessibilityRole="alert" style={styles.notice}>{failure}</Text>}
  <Text style={styles.notice}>{notice}</Text></ScrollView></View></Modal></ScrollView>;
 }
-const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:46},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});
+const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:18},shiftColorPanel:{backgroundColor:'#F6EEE4',borderRadius:12,padding:12,marginTop:10,marginBottom:10,gap:8},shiftColorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},shiftColorLabel:{fontSize:13,fontWeight:'600',color:colors.textDark},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});
