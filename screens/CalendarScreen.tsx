@@ -150,6 +150,12 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
   const googleStatus = useGoogleSyncStatus();
   const userCategories = useCategories();
   const [selectedCategory,setSelectedCategory]=useState<string>('all');
+  // 카테고리가 많아지면 캘린더 탭이 아래로 밀려 캘린더의 존재감이 옅어져서, 6개가
+  // 넘으면 기본으로 접어두고 펼치기 버튼으로만 전체를 보여준다.
+  const CATEGORY_COLLAPSE_THRESHOLD = 6;
+  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
+  const canCollapseCategories = userCategories.length > CATEGORY_COLLAPSE_THRESHOLD;
+  const visibleCategories = canCollapseCategories && !categoriesExpanded ? userCategories.slice(0, CATEGORY_COLLAPSE_THRESHOLD) : userCategories;
   const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? []);
   const [shiftColors] = useState(() => loadShiftColors());
   const getEventColor = (event: Event): string =>
@@ -401,11 +407,18 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
     >
       <View style={styles.calendarHero}>
         <View style={{flex:1,minWidth:0}}><Text style={styles.calendarEyebrow}>MY CALENDAR</Text><Text style={styles.calendarTitle}>내 생활을 한눈에.</Text><Text style={styles.calendarSubtitle}>카테고리를 만들면 꾹이 대화 속 일정을 알아서 분류해요.</Text></View>
-        <Pressable onPress={onCategories} style={styles.manageCategoryButton}><Text style={styles.manageCategoryButtonText}>＋ 카테고리</Text></Pressable>
+        <View style={styles.heroButtonRow}>
+          <Pressable onPress={onCategories} style={styles.manageCategoryButton}><Text style={styles.manageCategoryButtonText}>＋ 카테고리</Text></Pressable>
+          {canCollapseCategories && (
+            <Pressable onPress={()=>setCategoriesExpanded(v=>!v)} style={styles.manageCategoryButton}>
+              <Text style={styles.manageCategoryButtonText}>{categoriesExpanded?'카테고리 접기':'카테고리 펼치기'}</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
       <View style={styles.categoryBoard}>
         <Pressable onPress={()=>setSelectedCategory('all')} style={[styles.categoryCard,selectedCategory==='all'&&styles.categoryCardSelected]}><View style={[styles.categoryColorBar,{backgroundColor:'#B9ADA2'}]}/><Text style={styles.categoryName}>전체</Text><Text style={styles.categoryCount}>{upcomingCount('all')}개 예정</Text></Pressable>
-        {userCategories.map(category=><Pressable key={category.id} onPress={()=>setSelectedCategory(category.id)} style={[styles.categoryCard,{borderTopColor:category.color},selectedCategory===category.id&&styles.categoryCardSelected]}><View style={[styles.categoryColorBar,{backgroundColor:category.color}]}/><Text style={styles.categoryName}>{category.label}</Text><Text style={styles.categoryCount}>{upcomingCount(category.id)}개 예정 · {category.defaultReminderMin===0?'정각 알림':`${category.defaultReminderMin}분 전`}</Text></Pressable>)}
+        {visibleCategories.map(category=><Pressable key={category.id} onPress={()=>setSelectedCategory(category.id)} style={[styles.categoryCard,{borderTopColor:category.color},selectedCategory===category.id&&styles.categoryCardSelected]}><View style={[styles.categoryColorBar,{backgroundColor:category.color}]}/><Text style={styles.categoryName}>{category.label}</Text><Text style={styles.categoryCount}>{upcomingCount(category.id)}개 예정 · {category.defaultReminderMin===0?'정각 알림':`${category.defaultReminderMin}분 전`}</Text></Pressable>)}
       </View>
       <View style={styles.header}>
         {isEditingHeaderDate ? (
@@ -697,6 +710,7 @@ const styles = StyleSheet.create({
   calendarEyebrow:{fontSize:10,letterSpacing:1.5,color:'#9B6C51',fontWeight:'700'},
   calendarTitle:{fontSize:28,fontWeight:'800',color:colors.textDark,marginTop:5},
   calendarSubtitle:{fontSize:13,color:colors.warmGray,marginTop:5},
+  heroButtonRow:{flexDirection:'row',gap:8},
   manageCategoryButton:{backgroundColor:'#EFE2D5',paddingVertical:9,paddingHorizontal:13,borderRadius:12},
   manageCategoryButtonText:{fontSize:12,color:colors.textDark,fontWeight:'700'},
   categoryBoard:{flexDirection:'row',flexWrap:'wrap',gap:9,marginBottom:18},

@@ -1,10 +1,16 @@
 import {useRef,useState} from 'react';
 import {Text,TextInput,View,Switch} from 'react-native';
 import {Choice,controlStyles} from './ScheduleControls';
-import {parseRule,validateRule,describeRule,actionLabels,categories,type PersonalRule,type Rules,type RuleAction} from '../utils/scheduler';
+import {parseRule,validateRule,describeRule,actionLabels,type PersonalRule,type Rules,type RuleAction} from '../utils/scheduler';
 import {interpretRuleInput} from '../utils/ruleInput';
+import {useCategories} from '../utils/useCategories';
 const examples=['운동 다음 날은 쉬기','운동 주 3회 이하','업무 오후 10시 이후는 알려줘','주말 업무는 확인해줘','스터디 30분 전 알림','운동 30분 전 알림 준비물: 운동복과 물','스터디 바로 등록'];
 export function RuleComposer({rules,onChange}:{rules:Rules;onChange:(r:Rules)=>boolean}){
+ // 규칙 엔진(matchesRule)은 아직 운동/업무/개인/공부/건강 5가지 baseCategory로만 필터링할
+ // 수 있어서, 내가 만든 카테고리를 골라도 실제로는 그 카테고리의 baseCategory가 저장된다.
+ // 대신 목록 자체는 카테고리 탭에서 만든/수정한 이름 그대로 보여줘서 눈에 익은 이름으로
+ // 고를 수 있게 한다.
+ const userCategories=useCategories();
  const [text,setText]=useState(''),[draft,setDraft]=useState<PersonalRule|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[editing,setEditing]=useState<string|null>(null);
  const inFlight=useRef(false);
  function apply(next:Rules){if(onChange(next)){setError('');return true;}setError('저장하지 못했어요. 입력 내용은 유지했어요. 브라우저 저장 공간을 확인해 주세요.');return false;}
@@ -21,7 +27,7 @@ export function RuleComposer({rules,onChange}:{rules:Rules;onChange:(r:Rules)=>b
  <Choice label={busy?'해석 중…':'규칙 해석하기'} disabled={busy||!text.trim()} onPress={()=>void interpret()}/>
  {!!error&&<Text accessibilityRole="alert">{error}</Text>}
  {draft&&<View style={{gap:10,padding:16,backgroundColor:'#F6EEE4',borderRadius:12}}><Text>이렇게 기억할게요: {describeRule(draft)}</Text>
- <Text>대상 카테고리</Text><View style={controlStyles.row}>{Object.entries({all:'전체',...categories}).map(([key,label])=><Choice key={key} label={label} selected={draft.category===key} onPress={()=>setDraft({...draft,category:key as PersonalRule['category']})}/>)}</View>
+ <Text>대상 카테고리</Text><View style={controlStyles.row}><Choice label="전체" selected={draft.category==='all'} onPress={()=>setDraft({...draft,category:'all'})}/>{userCategories.map(c=><Choice key={c.id} label={c.label} selected={draft.category===c.baseCategory} onPress={()=>setDraft({...draft,category:c.baseCategory})}/>)}</View>
  <TextInput accessibilityLabel="규칙 대상 단어" placeholder="특정 단어만 적용 (비우면 카테고리 전체)" value={draft.keyword} onChangeText={keyword=>setDraft({...draft,keyword})} style={controlStyles.input}/>
  {!['auto','reminder'].includes(draft.type)&&<View style={controlStyles.row}>{Object.entries(actionLabels).map(([key,label])=><Choice key={key} label={label} selected={draft.action===key} onPress={()=>setDraft({...draft,action:key as RuleAction})}/>)}</View>}
  {draft.type==='auto'&&<Text>다른 규칙 위반이나 모호한 시간·장소는 계속 확인해요. 반복 등록도 먼저 확인해요.</Text>}

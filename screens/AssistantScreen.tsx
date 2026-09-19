@@ -231,6 +231,27 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   setNotice(`${done}개 일정 취소 완료`);setTarget(null);setCancelChoices([]);setText('');
   setSelectedDate(t.date);
  }
+ // Schedule/규칙 엔진은 하루짜리 일정만 알아서, 여행처럼 기간이 있는 일정은 그 경로를
+ // 안 태우고 Event를 직접 만들어 저장한다(가져오기 일정과 동일한 방식). 규칙 검사는
+ // 애초에 기간 일정을 모델링하지 못해 건너뛴다.
+ async function persistMultiDayEvent(ai:Awaited<ReturnType<typeof interpretEvent>>){
+  const chosen=findCategoryForText(`${text} ${ai.title}`,categoryKey(ai.category),userCategories);
+  const created:Event={
+   id:generateEventId(),userId:'local',title:ai.title,category:chosen.id,
+   startDate:ai.startDate,endDate:ai.endDate,time:ai.time||'09:00',durationMin:ai.durationMin??60,
+   place:ai.place?{...ai.place,lat:0,lng:0}:null,remindMin:chosen.defaultReminderMin,bufferMin:ai.bufferMin??0,
+   createdFrom:'text',sharedWith:[],notificationEnabled:true,
+  };
+  saveStoredEvents([...all(),created]);
+  setSelectedDate(created.startDate);
+  setText('');
+  const when=formatFriendlyDateTime(created.startDate,created.time);
+  const confirmMessage=`${when}부터 ${created.endDate}까지 ${created.title} 일정이 등록되었습니다`;
+  setNotice(confirmMessage);
+  const status=await getGoogleSyncStatus();if(!status.connected)return;
+  const googleEventId=await syncEventCreate(created);
+  if(googleEventId){saveStoredEvents(all().map(x=>x.id===created.id?{...x,googleEventId}:x));setNotice(`${confirmMessage} · Google 반영 완료`);}
+ }
  async function submit(){await guarded(async()=>{
   setNotice('');setCategoryOverride(null);setSkipped([]);setIssues([]);setChoices([]);
   if(hasCancelIntent(text)){
@@ -245,7 +266,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   catch(localError){
    if(/매주|매일|매월|평일|매달|격주|마다/.test(text))throw localError;
    const ai=await interpretEvent({text});
-   if(ai.endDate!==ai.startDate)throw Error('기간 일정은 캘린더에서 확인해 주세요. 일정 비서는 하루 일정과 반복 일정을 지원합니다.');
+   if(ai.endDate!==ai.startDate){await persistMultiDayEvent(ai);return;}
    event={title:ai.title,date:ai.startDate,time:ai.time||'',duration:ai.durationMin??60,category:categoryKey(ai.category),location:ai.place?.name,ambiguous:ai.ambiguousFields.includes('time')};
    unrecognized=ai.placeAliasCandidate;needsReview=ai.ambiguousFields.some(f=>f!=='place')||!ai.time;
    setNotice('Gemini로 해석했어요.');
@@ -286,7 +307,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  </View>}
  {importDrafts&&<RuleAwareImportReview title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={handleConfirmImport} onCancel={()=>setImportDrafts(null)}/>}
  </View>}
- <View style={styles.panel}><Text style={styles.sectionTitle}>말 한마디가 일정이 되는 순간.</Text><Text style={styles.label}>등록도 취소도 한 문장으로. 일정은 이 브라우저에 저장돼요.</Text></View></View>
+ <View style={[styles.panel,styles.importPanel]}><Text style={styles.sectionTitle}>말 한마디가 일정이 되는 순간.</Text><Text style={styles.label}>등록도 취소도 한 문장으로. 일정은 이 브라우저에 저장돼요.</Text></View></View>
  <View style={{flex:wide?1:undefined,minWidth:0}}><AgendaPreview date={selectedDate} onDate={setSelectedDate} onRules={onRules} onCalendar={onCalendar}/></View></View>
  <Modal visible={!!draft||!!target||cancelChoices.length>0||!!failure} transparent animationType="fade" onRequestClose={close}>
  <View style={styles.overlay}><ScrollView style={styles.modal} contentContainerStyle={{padding:22}}><Text style={styles.heading}>꾹이 확인할게요</Text>
