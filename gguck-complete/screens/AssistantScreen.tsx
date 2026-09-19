@@ -191,7 +191,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {!hasCancelIntent(text)&&<><Text style={styles.label}>반복 방식</Text><RepeatChoices value={repeatMode} onChange={setRepeatMode} disabled={busy}/><Text style={styles.label}>문장에 적은 반복 조건이 우선해요.</Text></>}
  {button(busy?'처리 중…':hasCancelIntent(text)?'요청 보내기':'일정 등록',()=>void submit())}
  <Text style={styles.label}>확인이 필요할 때만 물어봐요. 소요 시간 생략 시 60분.</Text>
- <Text style={styles.sectionTitle}>이렇게 말해보세요</Text><View style={styles.row}>{['내일 오후 8시 운동','매주 월수금 오후 8시 운동','다음주 금요일 8시 종숲 ㄱ','내일 운동 취소'].map(example=><Choice key={example} label={example} disabled={busy} onPress={()=>{setText(example);setRepeatMode('none');}}/>)}</View></View>
+ <Text style={styles.sectionTitle}>이렇게 말해보세요</Text><View style={styles.row}>{['내일 오후 8시 운동'].map(example=><Choice key={example} label={example} disabled={busy} onPress={()=>{setText(example);setRepeatMode('none');}}/>)}</View></View>
  {Platform.OS==='web'&&<View style={[styles.panel,styles.importPanel]}><Text style={styles.sectionTitle}>여러 일정 한 번에 가져오기</Text><Text style={styles.label}>.ics 파일, 근무표 엑셀, 근무표 사진에서 일정을 한 번에 뽑아 등록해요.</Text>
  {field('표/사진 속 내 이름',myName,handleMyNameChange)}
  {!importDrafts&&<View style={styles.row}>{button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}{button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}{button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}</View>}
