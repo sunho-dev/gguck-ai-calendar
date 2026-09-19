@@ -1,8 +1,9 @@
-import { addMinutesToTime } from './date'
+import { addDays, addMinutesToTime } from './date'
 
 export interface ImportedEventDraft {
   title: string
   startDate: string
+  endDate?: string // 여러 날에 걸친 일정의 마지막 날짜. 없으면 startDate와 같은 하루짜리로 취급
   time: string
   durationMin: number
   place: { name: string; address: string | null } | null
@@ -52,12 +53,20 @@ function toDraft(fields: Record<string, string>): ImportedEventDraft | null {
   if (!start) return null
 
   let durationMin = 60
+  let endDate = start.date
   const dtend = fields.DTEND
   if (dtend) {
     const end = parseDtValue(dtend)
     if (end) {
-      const diff = diffMinutes(start.date, start.time, end.date, end.time)
-      if (diff > 0) durationMin = diff
+      if (start.allDay && end.allDay) {
+        // 종일 일정의 DTEND는 배타적(다음날 자정)이라, 실제 마지막 날짜는 하루 앞이다.
+        // (여러 날짜에 걸친 여행 등 종일 일정만 여기서 다룬다. 시간 있는 일정은
+        // 기존처럼 durationMin으로만 길이를 나타내고 endDate는 시작일과 같게 둔다.)
+        endDate = end.date === start.date ? start.date : addDays(end.date, -1)
+      } else if (!start.allDay && !end.allDay) {
+        const diff = diffMinutes(start.date, start.time, end.date, end.time)
+        if (diff > 0) durationMin = diff
+      }
     }
   }
 
@@ -66,13 +75,14 @@ function toDraft(fields: Record<string, string>): ImportedEventDraft | null {
   return {
     title: unescapeIcsText(summary),
     startDate: start.date,
+    endDate,
     time: start.time,
     durationMin,
     place: location ? { name: unescapeIcsText(location), address: null } : null,
   }
 }
 
-function parseDtValue(raw: string): { date: string; time: string } | null {
+function parseDtValue(raw: string): { date: string; time: string; allDay: boolean } | null {
   const isUtc = raw.endsWith('Z')
   const digits = raw.replace('Z', '')
 
@@ -81,14 +91,15 @@ function parseDtValue(raw: string): { date: string; time: string } | null {
     const [, y, mo, da, h, mi] = withTime
     const date = `${y}-${mo}-${da}`
     const time = `${h}:${mi}`
-    return isUtc ? addMinutesToTime(date, time, 9 * 60) : { date, time }
+    const resolved = isUtc ? addMinutesToTime(date, time, 9 * 60) : { date, time }
+    return { ...resolved, allDay: false }
   }
 
   // 종일 일정(날짜만 있음): 오전 9시로 기본값을 둔다.
   const dateOnly = digits.match(/^(\d{4})(\d{2})(\d{2})$/)
   if (dateOnly) {
     const [, y, mo, da] = dateOnly
-    return { date: `${y}-${mo}-${da}`, time: '09:00' }
+    return { date: `${y}-${mo}-${da}`, time: '09:00', allDay: true }
   }
 
   return null

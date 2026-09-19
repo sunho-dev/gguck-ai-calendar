@@ -4,6 +4,7 @@ import { InterpretRefusedError, MODEL } from './_interpretCore'
 export interface BulkDraftEvent {
   title: string
   startDate: string // ISODate "YYYY-MM-DD"
+  endDate: string | null // 여행처럼 여러 날에 걸친 일정의 마지막 날짜. 하루짜리면 null
   time: string | null
   durationMin: number | null
   place: { name: string; address: string | null } | null
@@ -23,6 +24,7 @@ const BULK_EVENTS_SCHEMA: Schema = {
           // 결과가 수십~수백 개일 수 있는 대량 추출에서는 이 위험이 커서 형식 검증은
           // 빼고 받은 뒤 normalizeDate로 관대하게 파싱한다.
           startDate: { type: Type.STRING },
+          endDate: { type: Type.STRING, nullable: true },
           time: { type: Type.STRING, nullable: true },
           durationMin: { type: Type.INTEGER, nullable: true },
           place: {
@@ -35,7 +37,7 @@ const BULK_EVENTS_SCHEMA: Schema = {
             required: ['name', 'address'],
           },
         },
-        required: ['title', 'startDate', 'time', 'durationMin', 'place'],
+        required: ['title', 'startDate', 'endDate', 'time', 'durationMin', 'place'],
       },
     },
   },
@@ -47,21 +49,30 @@ function buildSystemPrompt(nowIso: string, hint: 'table' | 'photo', myName?: str
     '너는 사용자가 올린 자료에서 여러 개의 일정(캘린더 이벤트)을 한 번에 추출하는 도우미다.',
     `현재 시각은 ${nowIso} (한국 시간, KST)이다. 연도가 안 적혀 있으면 현재 시각을 기준으로 가장 가까운 미래로 추정하라.`,
     'startDate는 항상 YYYY-MM-DD 형식이다.',
+    '"9/11~9/13 제주도 여행"처럼 여러 날에 걸친 일정이면 endDate에 마지막 날짜(YYYY-MM-DD)를 채워라. 하루짜리 일정이면 endDate는 null로 둔다.',
     '시간이나 소요시간이 명시되지 않은 항목은 억지로 추측해서 채우지 말고 null로 남겨라.',
     '행/항목 하나가 명확히 일정으로 보이지 않으면(예: 합계, 범례, 빈 칸) 결과에서 제외하라.',
+  ]
+
+  // 근무표는 엑셀로 내려받아도, 사진으로 찍어도 결국 "사람×날짜" 그리드 모양인 경우가
+  // 흔해서 두 힌트 모두 같은 그리드 해석 규칙을 알아야 한다.
+  const gridInstructions = [
+    '표 맨 위에 "근무월" 같은 형태로 연-월이 적혀있으면 그 연도를 기준으로 삼고, 각 날짜 열 번호(1~31)와 조합해서 startDate를 만들어라.',
+    '"/" 기호나 완전히 빈 칸은 보통 휴무(근무 없음)를 뜻하니 일정으로 만들지 마라. 오른쪽 끝의 합계/총근무 횟수 같은 열도 일정이 아니다.',
+    '근무 코드(예: D/E/N, 주/야, 오픈/마감)만 적혀 있고 구체적 시간이 없으면, 코드 옆이나 표 범례에 시간 정보가 있는지 먼저 찾아보고, 정말 없으면 흔한 관례(예: D=주간 09:00, E=오후 14:00, N=야간 22:00)를 참고해 채우되 ambiguous하게 채웠다는 점을 title에 코드 원문을 그대로 남겨 알 수 있게 하라(예: title: "야간(N) 근무").',
   ]
 
   if (hint === 'table') {
     lines.push(
       '입력은 스프레드시트에서 추출한 표 형태 텍스트(CSV)다. 첫 줄은 헤더일 수 있다.',
-      '헤더 이름이 정확히 "날짜"/"제목"이 아니어도 의미상 비슷한 열(예: date, 업무, 근무)이면 알맞게 매핑하라.'
+      '헤더 이름이 정확히 "날짜"/"제목"이 아니어도 의미상 비슷한 열(예: date, 업무, 근무)이면 알맞게 매핑하라.',
+      '단, 첫 열이 이름이고 그 다음 열들이 1,2,3...처럼 날짜 번호인 "사람×날짜" 그리드 모양이면(근무표를 그대로 내려받은 경우) 아래 규칙을 따르라.',
+      ...gridInstructions
     )
   } else {
     lines.push(
       '입력은 근무표/일정표를 촬영한 사진이다. 표의 행/열 구조를 사진에서 읽어내라.',
-      '표 맨 위에 "근무월" 같은 형태로 연-월이 적혀있으면 그 연도를 기준으로 삼고, 각 날짜 열 번호(1~31)와 조합해서 startDate를 만들어라.',
-      '"/" 기호나 완전히 빈 칸은 보통 휴무(근무 없음)를 뜻하니 일정으로 만들지 마라. 오른쪽 끝의 합계/총근무 횟수 같은 열도 일정이 아니다.',
-      '근무 코드(예: D/E/N, 주/야, 오픈/마감)만 적혀 있고 구체적 시간이 없으면, 코드 옆이나 표 범례에 시간 정보가 있는지 먼저 찾아보고, 정말 없으면 흔한 관례(예: D=주간 09:00, E=오후 14:00, N=야간 22:00)를 참고해 채우되 ambiguous하게 채웠다는 점을 title에 코드 원문을 그대로 남겨 알 수 있게 하라(예: title: "야간(N) 근무").',
+      ...gridInstructions,
     )
   }
 
@@ -120,7 +131,13 @@ async function callGemini(
   // format 검증을 스키마에서 뺀 대신, 여기서 관대하게 정리한다. 날짜를 못 알아보는
   // 항목은 통째로 실패시키지 않고 그 항목만 걸러낸다.
   return parsed.events
-    .map((event) => ({ ...event, startDate: normalizeDate(event.startDate) }))
+    .map((event) => {
+      const startDate = normalizeDate(event.startDate)
+      const normalizedEnd = event.endDate ? normalizeDate(event.endDate) : null
+      // 끝나는 날짜가 시작일보다 앞이면(모델이 잘못 채운 경우) 하루짜리로 취급한다.
+      const endDate = normalizedEnd && startDate && normalizedEnd >= startDate ? normalizedEnd : startDate
+      return { ...event, startDate, endDate }
+    })
     .filter((event): event is BulkDraftEvent => event.startDate !== null)
 }
 

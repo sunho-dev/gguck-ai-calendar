@@ -7,7 +7,7 @@ export function assessImport(drafts:ImportedEventDraft[],existing:Event[],rules:
  const planned:Schedule[]=existing.filter(e=>!e.cancelledAt).map(toSchedule);
  return drafts.map(d=>{
   const schedule:Schedule={title:d.title,date:d.startDate,time:d.time,duration:d.durationMin,category:categoryKey(d.title),location:d.place?.name,imported:true};
-  const event={...toEvent(schedule,rules),createdFrom:'paste' as const,place:d.place?{...d.place,lat:0,lng:0}:null};
+  const event={...toEvent(schedule,rules),createdFrom:'paste' as const,place:d.place?{...d.place,lat:0,lng:0}:null,endDate:d.endDate??d.startDate};
   const verdict=check(schedule,planned,rules,now);
   if(!d.title.trim())verdict.reasons.push({type:'invalid',message:'일정 제목이 비어 있어요.',action:'block',overridable:false});
   // Include every selected item: approving exceptions must not hide later conflicts.

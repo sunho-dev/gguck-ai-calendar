@@ -31,9 +31,10 @@ async function requestInterpret(text: string, createdFrom: InterpretEventParams[
   const body = await response.json()
 
   if (!response.ok) {
-    const message = body?.detail ? `${body.error} (${body.detail})` : (body?.error ?? 'AI 해석 요청이 실패했습니다.')
-    const error = new Error(message)
-    ;(error as Error & { status?: number }).status = response.status
+    // detail(디버깅용 원본 에러)은 화면 문구에 안 섞고 콘솔에서만 보이게 별도로 둔다.
+    const error = new Error(body?.error ?? 'AI 해석 요청이 실패했습니다.') as Error & { status?: number; detail?: string }
+    error.status = response.status
+    error.detail = body?.detail
     throw error
   }
 

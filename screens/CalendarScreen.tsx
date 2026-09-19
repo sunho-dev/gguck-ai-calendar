@@ -403,9 +403,12 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
       </View>
 
       {Platform.OS === 'web' && (
-        <Pressable style={styles.shareRowButton} onPress={() => setShareModalVisible(true)}>
-          <Text style={styles.shareRowButtonText}>일정 공유하기</Text>
-        </Pressable>
+        <View style={styles.shareRow}>
+          <Pressable style={styles.shareRowButton} onPress={() => setShareModalVisible(true)}>
+            <Text style={styles.shareRowButtonText}>근무 공유하기</Text>
+          </Pressable>
+          <Text style={styles.shareRowCaption}>개인 일정은 제외하고 근무 일정만 표시해서 친구와 공유할 수 있어요.</Text>
+        </View>
       )}
 
       {viewMode === 'week' ? (
@@ -665,6 +668,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 3,
   },
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  shareRowCaption: {
+    fontSize: 11,
+    color: colors.warmGray,
+  },
   shareRowButton: {
     alignSelf: 'flex-start',
     backgroundColor: colors.white,
@@ -673,7 +687,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    marginBottom: 12,
   },
   shareRowButtonText: {
     fontSize: 12,

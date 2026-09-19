@@ -20,6 +20,7 @@ import {categoryKey,loadRules,toEvent,toSchedule} from '../utils/scheduleAdapter
 import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,matchesRule,reminderFor,type Schedule,type Category} from '../utils/scheduler';
 import {generateEventId} from '../utils/quickEntry';
 import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
+import {DEMO_EXCEL_CSV,DEMO_ICS_CONTENT} from '../utils/demoImportData';
 import {interpretBulkImage,interpretBulkTable} from '../utils/bulkInterpret';
 import {loadMyName,saveMyName} from '../utils/myNameStorage';
 import {extractShiftLabel,suggestColorForLabel} from '../utils/shiftClassify';
@@ -43,10 +44,21 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   setShiftColors(next);
   saveShiftColors(next);
  };
+ // 근무 유형 색상 지정은 데이/이브닝/나이트처럼 몇 가지 라벨이 반복되는 근무표를 위한
+ // 기능이라, 제목이 거의 다 서로 다른 일반 개인 일정(예: 평범한 .ics 캘린더)을 가져오면
+ // 고유 라벨이 지나치게 많아져서(일정 개수만큼) 오히려 방해가 된다. 이럴 땐 색상 지정
+ // UI 자체를 건너뛴다.
+ const MAX_SHIFT_LABELS=8;
+ const getShiftLabels=(drafts:ImportedEventDraft[]):string[]=>Array.from(new Set(drafts.map(d=>extractShiftLabel(d.title))));
+ const isShiftLikeImport=(drafts:ImportedEventDraft[]):boolean=>{
+  const labels=getShiftLabels(drafts);
+  return labels.length>0&&labels.length<=MAX_SHIFT_LABELS;
+ };
  // 새로 가져온 일정들에 등장하는 근무 유형 라벨마다 아직 색이 없으면 기본값을 배정해둔다
  // (드롭다운이 항상 값을 갖고 있어야 하므로, 화면에 보여주기 직전에 한 번 채워준다).
  const ensureShiftColorsFor=(drafts:ImportedEventDraft[])=>{
-  const labels=Array.from(new Set(drafts.map(d=>extractShiftLabel(d.title))));
+  if(!isShiftLikeImport(drafts))return;
+  const labels=getShiftLabels(drafts);
   const next={...shiftColors};
   let changed=false;
   for(const label of labels){
@@ -92,6 +104,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  };
  const handleImportPhoto=async()=>{
   setImportError(null);
+  if(typeof window!=='undefined')window.alert('방향이 돌아가지 않고 선명하게 찍힌 사진으로 준비해주세요.');
   const picked=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],quality:1});
   if(picked.canceled)return;
   const asset=picked.assets[0];
@@ -107,8 +120,27 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    setImportSource('사진에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
   }catch(err){setIsImporting(false);console.warn('[photo-import] 실패:',err);setImportError(err instanceof Error?err.message:'사진을 처리하는 데 실패했어요.');}
  };
+ // 심사위원 등이 실제 파일 없이도 바로 눌러볼 수 있는 데모 버튼들. 파일 선택 과정만
+ // 생략할 뿐, 그 다음(엑셀은 실제 Gemini 호출까지)은 실제 가져오기와 동일한 경로를 탄다.
+ const handleDemoIcs=()=>{
+  setImportError(null);
+  const drafts=parseIcsContent(DEMO_ICS_CONTENT);
+  if(drafts.length===0){setImportError('.ics 샘플에서 일정을 찾지 못했어요.');return;}
+  setImportSource('.ics 샘플 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
+ };
+ const handleDemoExcel=async()=>{
+  setImportError(null);
+  try{
+   setIsImporting(true);
+   const drafts=await interpretBulkTable(DEMO_EXCEL_CSV,myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('엑셀 샘플에서 일정을 찾지 못했어요.');return;}
+   setImportSource('엑셀 샘플에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
+  }catch(err){setIsImporting(false);console.warn('[demo-excel] 실패:',err);setImportError(err instanceof Error?err.message:'엑셀 샘플을 처리하는 데 실패했어요.');}
+ };
  const handleConfirmImport=async(approved:Event[])=>{
-  const created:Event[]=approved.map(e=>({...e,shiftType:extractShiftLabel(e.title)}));
+  const shiftLike=importDrafts?isShiftLikeImport(importDrafts):false;
+  const created:Event[]=approved.map(e=>shiftLike?{...e,shiftType:extractShiftLabel(e.title)}:e);
   saveStoredEvents([...all(),...created]);
   setImportDrafts(null);
   setNotice(`가져온 일정 ${created.length}개를 등록했어요.`);
@@ -215,12 +247,18 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  <Text style={styles.sectionTitle}>이렇게 말해보세요</Text><View style={styles.row}>{['내일 오후 8시 운동','매주 월수금 오후 8시 운동','다음주 금요일 8시 종숲 ㄱ','내일 운동 취소'].map(example=><Choice key={example} label={example} disabled={busy} onPress={()=>{setText(example);setRepeatMode('none');}}/>)}</View></View>
  {Platform.OS==='web'&&<View style={[styles.panel,styles.importPanel]}><Text style={styles.sectionTitle}>여러 일정 한 번에 가져오기</Text><Text style={styles.label}>.ics 파일, 근무표 엑셀, 근무표 사진에서 일정을 한 번에 뽑아 등록해요.</Text>
  {field('표/사진 속 내 이름',myName,handleMyNameChange)}
- {!importDrafts&&<View style={styles.row}>{button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}{button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}{button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}</View>}
+ {!importDrafts&&<View style={styles.row}>
+ {button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}
+ <Choice label="ics 샘플 사용해보기" disabled={isImporting} onPress={()=>handleDemoIcs()}/>
+ {button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}
+ <Choice label="엑셀 샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoExcel()}/>
+ {button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}
+ </View>}
  {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
  {!!importError&&<Text style={styles.notice}>{importError}</Text>}
- {importDrafts&&importDrafts.length>0&&<View style={styles.shiftColorPanel}>
+ {importDrafts&&isShiftLikeImport(importDrafts)&&<View style={styles.shiftColorPanel}>
  <Text style={styles.label}>근무 유형별 색을 정해두면 캘린더에서 한눈에 구분돼요.</Text>
- {Array.from(new Set(importDrafts.map(d=>extractShiftLabel(d.title)))).map(label=><View key={label} style={styles.shiftColorRow}><Text style={styles.shiftColorLabel}>{label}</Text><ColorDropdown value={shiftColors[label]??suggestColorForLabel(label,Object.values(shiftColors))} onChange={hex=>handleShiftColorChange(label,hex)}/></View>)}
+ {getShiftLabels(importDrafts).map(label=><View key={label} style={styles.shiftColorRow}><Text style={styles.shiftColorLabel}>{label}</Text><ColorDropdown value={shiftColors[label]??suggestColorForLabel(label,Object.values(shiftColors))} onChange={hex=>handleShiftColorChange(label,hex)}/></View>)}
  </View>}
  {importDrafts&&<RuleAwareImportReview title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={handleConfirmImport} onCancel={()=>setImportDrafts(null)}/>}
  </View>}

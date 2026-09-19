@@ -3,14 +3,15 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, shiftColorPalette } from '../constants/colors';
 
-// 드롭다운을 누르면 목록이 그 자리에서 펼쳐지는(내용을 밀어내는) 단순한 방식.
-// 절대 위치 팝오버 대신 이렇게 만든 이유는 스크롤 카드 안에서 겹침/잘림 문제를 피하기 위함.
+// 옵션 목록을 절대 위치로 띄워서 카드 높이에 영향을 안 주게 한다(예전엔 내용을 밀어내는
+// 방식이라 드롭다운을 펼 때마다 카드가 길어졌었음). 펼쳐졌을 때만 zIndex를 높여서
+// 아래에 있는 다른 드롭다운 행 위로 확실히 겹쳐 보이게 한다.
 export function ColorDropdown({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
   const [open, setOpen] = useState(false);
   const selected = shiftColorPalette.find((c) => c.value === value) ?? shiftColorPalette[0];
 
   return (
-    <View>
+    <View style={[styles.container, open && styles.containerOpen]}>
       <Pressable style={styles.trigger} onPress={() => setOpen((v) => !v)}>
         <View style={[styles.swatch, { backgroundColor: selected.value }]} />
         <Text style={styles.triggerText}>{selected.name}</Text>
@@ -39,6 +40,12 @@ export function ColorDropdown({ value, onChange }: { value: string; onChange: (h
 }
 
 const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  containerOpen: {
+    zIndex: 100,
+  },
   trigger: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -65,12 +72,21 @@ const styles = StyleSheet.create({
     color: colors.warmGray,
   },
   optionList: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
     marginTop: 4,
+    minWidth: 110,
     backgroundColor: colors.white,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.lightBeige,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
   },
   option: {
     flexDirection: 'row',
