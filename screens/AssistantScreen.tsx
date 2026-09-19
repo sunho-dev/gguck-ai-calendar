@@ -22,8 +22,8 @@ import {generateEventId} from '../utils/quickEntry';
 import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
 import {interpretBulkImage,interpretBulkTable} from '../utils/bulkInterpret';
 import {loadMyName,saveMyName} from '../utils/myNameStorage';
-import {classifyShift} from '../utils/shiftClassify';
-import {SHIFT_TYPES,loadShiftColors,saveShiftColors,type ShiftColorMap} from '../utils/shiftColorStore';
+import {extractShiftLabel,suggestColorForLabel} from '../utils/shiftClassify';
+import {loadShiftColors,saveShiftColors,type ShiftColorMap} from '../utils/shiftColorStore';
 
 type Scope='one'|'following'|'all';
 export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;onRules?:()=>void;onCalendar?:()=>void}){
@@ -38,10 +38,21 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  const [importDrafts,setImportDrafts]=useState<ImportedEventDraft[]|null>(null),[importSource,setImportSource]=useState<string|null>(null);
  const [importError,setImportError]=useState<string|null>(null),[isImporting,setIsImporting]=useState(false),[myName,setMyName]=useState(()=>loadMyName());
  const [shiftColors,setShiftColors]=useState<ShiftColorMap>(()=>loadShiftColors());
- const handleShiftColorChange=(type:typeof SHIFT_TYPES[number],hex:string)=>{
-  const next={...shiftColors,[type]:hex};
+ const handleShiftColorChange=(label:string,hex:string)=>{
+  const next={...shiftColors,[label]:hex};
   setShiftColors(next);
   saveShiftColors(next);
+ };
+ // 새로 가져온 일정들에 등장하는 근무 유형 라벨마다 아직 색이 없으면 기본값을 배정해둔다
+ // (드롭다운이 항상 값을 갖고 있어야 하므로, 화면에 보여주기 직전에 한 번 채워준다).
+ const ensureShiftColorsFor=(drafts:ImportedEventDraft[])=>{
+  const labels=Array.from(new Set(drafts.map(d=>extractShiftLabel(d.title))));
+  const next={...shiftColors};
+  let changed=false;
+  for(const label of labels){
+   if(!next[label]){next[label]=suggestColorForLabel(label,Object.values(next));changed=true;}
+  }
+  if(changed){setShiftColors(next);saveShiftColors(next);}
  };
  const lock=useRef(false);
  const all=()=>loadStoredEvents()||[];
@@ -55,7 +66,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    const content=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
    const drafts=parseIcsContent(content);
    if(drafts.length===0){setImportError('.ics 파일에서 일정을 찾지 못했어요.');return;}
-   setImportSource('.ics 파일에서 찾은 일정');setImportDrafts(drafts);
+   setImportSource('.ics 파일에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
   }catch(err){console.warn('[ics-import] 실패:',err);setImportError('.ics 파일을 읽는 데 실패했어요.');}
  };
  const handleImportExcel=async()=>{
@@ -76,7 +87,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    const drafts=await interpretBulkTable(csvText,myName);
    setIsImporting(false);
    if(drafts.length===0){setImportError('파일에서 일정을 찾지 못했어요.');return;}
-   setImportSource('엑셀 파일에서 찾은 일정');setImportDrafts(drafts);
+   setImportSource('엑셀 파일에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
   }catch(err){setIsImporting(false);console.warn('[excel-import] 실패:',err);setImportError(err instanceof Error?err.message:'엑셀 파일을 처리하는 데 실패했어요.');}
  };
  const handleImportPhoto=async()=>{
@@ -93,11 +104,11 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    const drafts=await interpretBulkImage(manipulated.base64,'image/jpeg',myName);
    setIsImporting(false);
    if(drafts.length===0){setImportError('사진에서 일정을 찾지 못했어요.');return;}
-   setImportSource('사진에서 찾은 일정');setImportDrafts(drafts);
+   setImportSource('사진에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
   }catch(err){setIsImporting(false);console.warn('[photo-import] 실패:',err);setImportError(err instanceof Error?err.message:'사진을 처리하는 데 실패했어요.');}
  };
  const handleConfirmImport=async(approved:Event[])=>{
-  const created:Event[]=approved.map(e=>({...e,shiftType:classifyShift(e.title)??undefined}));
+  const created:Event[]=approved.map(e=>({...e,shiftType:extractShiftLabel(e.title)}));
   saveStoredEvents([...all(),...created]);
   setImportDrafts(null);
   setNotice(`가져온 일정 ${created.length}개를 등록했어요.`);
@@ -207,9 +218,9 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {!importDrafts&&<View style={styles.row}>{button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}{button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}{button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}</View>}
  {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
  {!!importError&&<Text style={styles.notice}>{importError}</Text>}
- {importDrafts&&<View style={styles.shiftColorPanel}>
+ {importDrafts&&importDrafts.length>0&&<View style={styles.shiftColorPanel}>
  <Text style={styles.label}>근무 유형별 색을 정해두면 캘린더에서 한눈에 구분돼요.</Text>
- {SHIFT_TYPES.map(type=><View key={type} style={styles.shiftColorRow}><Text style={styles.shiftColorLabel}>{type}</Text><ColorDropdown value={shiftColors[type]} onChange={hex=>handleShiftColorChange(type,hex)}/></View>)}
+ {Array.from(new Set(importDrafts.map(d=>extractShiftLabel(d.title)))).map(label=><View key={label} style={styles.shiftColorRow}><Text style={styles.shiftColorLabel}>{label}</Text><ColorDropdown value={shiftColors[label]??suggestColorForLabel(label,Object.values(shiftColors))} onChange={hex=>handleShiftColorChange(label,hex)}/></View>)}
  </View>}
  {importDrafts&&<RuleAwareImportReview title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={handleConfirmImport} onCancel={()=>setImportDrafts(null)}/>}
  </View>}

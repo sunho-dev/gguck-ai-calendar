@@ -1,28 +1,17 @@
-import { shiftColorPalette } from '../constants/colors'
+// 근무 유형은 사용자마다 다르게 부를 수 있어서(주간/데이/오전 등) 고정된 목록이 아니라,
+// 실제로 가져온 일정 제목에서 뽑아낸 라벨을 그대로 키로 써서 색을 저장한다.
+export type ShiftColorMap = Record<string, string>
 
-export const SHIFT_TYPES = ['데이', '이브닝', '나이트', '휴일'] as const
-export type ShiftType = (typeof SHIFT_TYPES)[number]
-
-export type ShiftColorMap = Record<ShiftType, string>
-
-const STORAGE_KEY = 'gguck-shift-colors-v1'
-
-const DEFAULT_SHIFT_COLORS: ShiftColorMap = {
-  데이: shiftColorPalette[0].value, // 노랑
-  이브닝: shiftColorPalette[1].value, // 코랄
-  나이트: shiftColorPalette[2].value, // 남색
-  휴일: shiftColorPalette[3].value, // 베이지
-}
+const STORAGE_KEY = 'gguck-shift-colors-v2'
 
 export function loadShiftColors(): ShiftColorMap {
-  if (typeof window === 'undefined') return DEFAULT_SHIFT_COLORS
+  if (typeof window === 'undefined') return {}
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_SHIFT_COLORS
-    const parsed = JSON.parse(raw) as Partial<ShiftColorMap>
-    return { ...DEFAULT_SHIFT_COLORS, ...parsed }
+    if (!raw) return {}
+    return JSON.parse(raw) as ShiftColorMap
   } catch {
-    return DEFAULT_SHIFT_COLORS
+    return {}
   }
 }
 
