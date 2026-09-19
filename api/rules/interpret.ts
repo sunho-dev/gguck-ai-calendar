@@ -26,6 +26,7 @@ type과 params: rest {days:1..7} 일정 사이 완전히 비우는 날짜 수; w
  }catch(e){
   if(e instanceof RateLimitedError)return res.status(429).json({error:e.message});
   const status=Number((e as {status?:number})?.status);
-  return res.status(status===429?429:503).json({error:status===429?'AI 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.':'AI 해석 서비스에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.'});
+  const detail=e instanceof Error?e.message.slice(0,300):undefined;
+  return res.status(status===429?429:503).json({error:status===429?'AI 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.':'AI 해석 서비스에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',detail});
  }
 }

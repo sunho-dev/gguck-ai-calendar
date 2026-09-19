@@ -82,7 +82,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
     if (err instanceof ApiError && err.status === 429) {
-      res.status(429).json({ error: '오늘의 AI 무료 사용량을 다 썼어요. 내일 다시 시도해주세요.' } satisfies ErrorBody)
+      res
+        .status(429)
+        .json({ error: 'AI 요청 한도에 걸렸어요. 잠시 후 다시 시도해주세요.', detail: err.message.slice(0, 300) } satisfies ErrorBody)
       return
     }
     const detail = err instanceof Error ? err.message.slice(0, 300) : undefined

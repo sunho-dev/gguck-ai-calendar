@@ -31,7 +31,8 @@ async function requestInterpret(text: string, createdFrom: InterpretEventParams[
   const body = await response.json()
 
   if (!response.ok) {
-    const error = new Error(body?.error ?? 'AI 해석 요청이 실패했습니다.')
+    const message = body?.detail ? `${body.error} (${body.detail})` : (body?.error ?? 'AI 해석 요청이 실패했습니다.')
+    const error = new Error(message)
     ;(error as Error & { status?: number }).status = response.status
     throw error
   }

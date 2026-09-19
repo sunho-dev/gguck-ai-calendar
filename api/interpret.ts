@@ -19,6 +19,7 @@ interface InterpretResponseBody {
 
 interface InterpretErrorBody {
   error: string
+  detail?: string // 디버깅용 원본 에러 메시지 일부 (해커톤 개발 단계라 임시로 노출)
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -68,7 +69,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
     if (err instanceof ApiError && err.status === 429) {
-      res.status(429).json({ error: '오늘의 AI 무료 사용량을 다 썼어요. 내일 다시 시도해주세요.' } satisfies InterpretErrorBody)
+      res
+        .status(429)
+        .json({ error: 'AI 요청 한도에 걸렸어요. 잠시 후 다시 시도해주세요.', detail: err.message.slice(0, 300) } satisfies InterpretErrorBody)
       return
     }
     res.status(502).json({ error: 'AI 해석 중 오류가 발생했습니다.' } satisfies InterpretErrorBody)
