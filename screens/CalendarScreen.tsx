@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import {check} from '../utils/scheduler';
 import {toSchedule,loadRules,categoryKey} from '../utils/scheduleAdapter';
@@ -362,7 +362,11 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
   const upcomingCount=(categoryId:string)=>events.filter(e=>!e.cancelledAt&&e.startDate>=today&&(categoryId==='all'||e.category===categoryId)).length;
 
   return (
-    <View style={styles.page}>
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={styles.pageContent}
+      showsVerticalScrollIndicator
+    >
       <View style={styles.calendarHero}>
         <View style={{flex:1,minWidth:0}}><Text style={styles.calendarEyebrow}>MY CALENDAR</Text><Text style={styles.calendarTitle}>내 생활을 한눈에.</Text><Text style={styles.calendarSubtitle}>카테고리를 만들면 꾹이 대화 속 일정을 알아서 분류해요.</Text></View>
         <Pressable onPress={onCategories} style={styles.manageCategoryButton}><Text style={styles.manageCategoryButtonText}>＋ 카테고리</Text></Pressable>
@@ -570,13 +574,12 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
         </View>
       ) : null}
 
-      <FlatList
-        data={eventsForDay}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.agendaList}
-        ListEmptyComponent={<Text style={styles.emptyText}>등록된 일정이 없어요.</Text>}
-        renderItem={({ item }) => (
+      <View style={styles.agendaList}>
+        {eventsForDay.length===0 ? (
+          <Text style={styles.emptyText}>등록된 일정이 없어요.</Text>
+        ) : eventsForDay.map(item => (
           <View
+            key={item.id}
             style={[styles.eventCard, { borderLeftColor: getEventColor(item) }]}
           >
             <View style={styles.eventCardBody}>
@@ -608,8 +611,8 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
               </View>
             </View>
           </View>
-        )}
-      />
+        ))}
+      </View>
 
       {googleStatus.connected ? (
         <Text style={styles.syncStatusText}>
@@ -624,7 +627,7 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
         viewedMonth={viewMode === 'month' ? viewedMonth : startOfMonth(selectedDate)}
         shiftColors={shiftColors}
       />
-    </View>
+    </ScrollView>
   );
 }
 
@@ -633,7 +636,10 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     maxWidth: 980,
+  },
+  pageContent: {
     paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   calendarHero:{flexDirection:'row',alignItems:'flex-end',gap:16,flexWrap:'wrap',marginTop:18,marginBottom:14},
   calendarEyebrow:{fontSize:10,letterSpacing:1.5,color:'#9B6C51',fontWeight:'700'},
