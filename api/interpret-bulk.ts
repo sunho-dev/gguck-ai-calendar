@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { ApiError } from '@google/genai'
 import { InterpretRefusedError } from './_interpretCore'
 import { interpretBulkImage, interpretBulkTable, type BulkDraftEvent } from './_bulkInterpretCore'
+import { resolveGeminiKey } from './_geminiKey'
+import { checkGeminiRateLimit, RateLimitedError } from './_rateLimiter'
 
 interface BulkRequestBody {
   kind: 'table' | 'image'
@@ -27,9 +29,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    res.status(500).json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다.' } satisfies ErrorBody)
+  let apiKey: string, bucket: string
+  try {
+    ;({ apiKey, bucket } = resolveGeminiKey('GEMINI_API_KEY_BULK'))
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message } satisfies ErrorBody)
     return
   }
 
@@ -37,6 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const nowIso = body?.now ?? new Date().toISOString()
 
   try {
+    await checkGeminiRateLimit(bucket)
     let events: BulkDraftEvent[]
 
     if (body?.kind === 'table') {
@@ -63,6 +68,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(200).json({ events } satisfies BulkResponseBody)
   } catch (err) {
+    if (err instanceof RateLimitedError) {
+      res.status(429).json({ error: err.message } satisfies ErrorBody)
+      return
+    }
     if (err instanceof InterpretRefusedError) {
       res.status(422).json({ error: err.message } satisfies ErrorBody)
       return

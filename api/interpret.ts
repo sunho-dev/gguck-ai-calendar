@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { ApiError } from '@google/genai'
 import { interpretEventText, InterpretRefusedError, type InterpretedEvent, type KnownPlaceAlias } from './_interpretCore'
+import { resolveGeminiKey } from './_geminiKey'
+import { checkGeminiRateLimit, RateLimitedError } from './_rateLimiter'
 
 export type { InterpretedEvent, KnownPlaceAlias }
 
@@ -25,9 +27,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    res.status(500).json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다.' } satisfies InterpretErrorBody)
+  let apiKey: string, bucket: string
+  try {
+    ;({ apiKey, bucket } = resolveGeminiKey('GEMINI_API_KEY_INTERPRET'))
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message } satisfies InterpretErrorBody)
     return
   }
 
@@ -46,9 +50,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const knownAliases = Array.isArray(body?.knownAliases) ? body.knownAliases : []
 
   try {
+    await checkGeminiRateLimit(bucket)
     const event = await interpretEventText(text, nowIso, apiKey, knownAliases)
     res.status(200).json({ event } satisfies InterpretResponseBody)
   } catch (err) {
+    if (err instanceof RateLimitedError) {
+      res.status(429).json({ error: err.message } satisfies InterpretErrorBody)
+      return
+    }
     if (err instanceof InterpretRefusedError) {
       res.status(422).json({ error: err.message } satisfies InterpretErrorBody)
       return
