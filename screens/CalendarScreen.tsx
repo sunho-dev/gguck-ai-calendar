@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import {check} from '../utils/scheduler';
-import {toSchedule,loadRules} from '../utils/scheduleAdapter';
+import {toSchedule,loadRules,categoryKey} from '../utils/scheduleAdapter';
 import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
 import koreanHolidays from '../data/koreanHolidays.json';
@@ -26,6 +26,8 @@ import { mergeGoogleEvents, pullGoogleEvents } from '../utils/googlePull';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 import { loadShiftColors } from '../utils/shiftColorStore';
 import { ShareCalendarModal } from '../components/ShareCalendarModal';
+import {findCategoryForText,getCategory} from '../utils/categoryStore';
+import {useCategories} from '../utils/useCategories';
 
 interface ResolvedEntry {
   title: string;
@@ -44,26 +46,30 @@ async function resolveQuickEntry(text: string): Promise<ResolvedEntry | null> {
   try {
     const interpreted = await interpretEvent({ text, createdFrom: 'text' });
     if(!interpreted.time || interpreted.ambiguousFields.length || interpreted.placeAliasCandidate)throw new Error('날짜·시간·장소를 명확히 입력해 주세요.');
+    const baseCategory=categoryKey(interpreted.category);
+    const matchedCategory=findCategoryForText(`${text} ${interpreted.title}`,baseCategory);
+    const hasExplicitReminder=/알림|미리\s*알려|\d+\s*(?:분|시간|일)\s*전/.test(text);
     return {
       title: interpreted.title,
-      category: interpreted.category,
+      category: matchedCategory.id,
       time: interpreted.time!,
       durationMin: interpreted.durationMin ?? 60,
       place: interpreted.place ? { ...interpreted.place, lat: 0, lng: 0 } : null,
-      remindMin: interpreted.remindMin ?? 0,
+      remindMin: hasExplicitReminder ? (interpreted.remindMin ?? matchedCategory.defaultReminderMin) : matchedCategory.defaultReminderMin,
       bufferMin: interpreted.bufferMin ?? 0,
     };
   } catch (err) {
     console.warn('[quick-add] AI 해석 실패, 기본 파서로 대체합니다:', err);
     const parsed = parseQuickEntry(text);
     if (!parsed || (!/오전|오후/.test(text) && Number(parsed.time.slice(0,2))<=12)) return null;
+    const matchedCategory=findCategoryForText(`${text} ${parsed.title}`,'personal');
     return {
       title: parsed.title,
-      category: 'personal',
+      category: matchedCategory.id,
       time: parsed.time,
       durationMin: 60,
       place: null,
-      remindMin: 0,
+      remindMin: matchedCategory.defaultReminderMin,
       bufferMin: 0,
     };
   }
@@ -139,13 +145,15 @@ function buildSampleEvents(today: string): Event[] {
 
 type ViewMode = 'week' | 'month';
 
-export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
+export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:string)=>void;onCategories?:()=>void}) {
   const today = useMemo(() => todayISODate(), []);
   const googleStatus = useGoogleSyncStatus();
+  const userCategories = useCategories();
+  const [selectedCategory,setSelectedCategory]=useState<string>('all');
   const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? []);
   const [shiftColors] = useState(() => loadShiftColors());
   const getEventColor = (event: Event): string =>
-    (event.shiftType && shiftColors[event.shiftType]) || CATEGORY_COLOR[event.category] || colors.warmGray;
+    (event.shiftType && shiftColors[event.shiftType]) || getCategory(event.category,userCategories)?.color || CATEGORY_COLOR[event.category] || colors.warmGray;
   const [selectedDate, setSelectedDate] = useState(today);
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [viewedMonth, setViewedMonth] = useState(() => startOfMonth(today));
@@ -191,7 +199,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
     const seen = new Set<string>();
     const result: string[] = [];
     for (const event of events) {
-      if (event.cancelledAt || event.startDate > date || event.endDate < date) continue;
+      if (event.cancelledAt || event.startDate > date || event.endDate < date || (selectedCategory!=='all'&&event.category!==selectedCategory)) continue;
       const color = getEventColor(event);
       if (!seen.has(color)) {
         seen.add(color);
@@ -203,7 +211,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
 
   const holidayName = HOLIDAYS[selectedDate];
   const eventsForDay = events
-    .filter((event) => !event.cancelledAt && event.startDate <= selectedDate && event.endDate >= selectedDate)
+    .filter((event) => !event.cancelledAt && event.startDate <= selectedDate && event.endDate >= selectedDate && (selectedCategory==='all'||event.category===selectedCategory))
     .sort((a, b) => a.time.localeCompare(b.time));
 
   const switchToWeek = () => {
@@ -287,6 +295,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
         endDate: selectedDate,
         createdFrom: 'text',
         sharedWith: [],
+        notificationEnabled: true,
         ...resolved,
       };
       const verdict = check(toSchedule(newEvent), events.map(toSchedule), loadRules());
@@ -350,8 +359,18 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   };
 
 
+  const upcomingCount=(categoryId:string)=>events.filter(e=>!e.cancelledAt&&e.startDate>=today&&(categoryId==='all'||e.category===categoryId)).length;
+
   return (
     <View style={styles.page}>
+      <View style={styles.calendarHero}>
+        <View style={{flex:1,minWidth:0}}><Text style={styles.calendarEyebrow}>MY CALENDAR</Text><Text style={styles.calendarTitle}>내 생활을 한눈에.</Text><Text style={styles.calendarSubtitle}>카테고리를 만들면 꾹이 대화 속 일정을 알아서 분류해요.</Text></View>
+        <Pressable onPress={onCategories} style={styles.manageCategoryButton}><Text style={styles.manageCategoryButtonText}>＋ 카테고리</Text></Pressable>
+      </View>
+      <View style={styles.categoryBoard}>
+        <Pressable onPress={()=>setSelectedCategory('all')} style={[styles.categoryCard,selectedCategory==='all'&&styles.categoryCardSelected]}><View style={[styles.categoryColorBar,{backgroundColor:'#B9ADA2'}]}/><Text style={styles.categoryName}>전체</Text><Text style={styles.categoryCount}>{upcomingCount('all')}개 예정</Text></Pressable>
+        {userCategories.map(category=><Pressable key={category.id} onPress={()=>setSelectedCategory(category.id)} style={[styles.categoryCard,{borderTopColor:category.color},selectedCategory===category.id&&styles.categoryCardSelected]}><View style={[styles.categoryColorBar,{backgroundColor:category.color}]}/><Text style={styles.categoryName}>{category.label}</Text><Text style={styles.categoryCount}>{upcomingCount(category.id)}개 예정 · {category.defaultReminderMin===0?'정각 알림':`${category.defaultReminderMin}분 전`}</Text></Pressable>)}
+      </View>
       <View style={styles.header}>
         {isEditingHeaderDate ? (
           <View style={styles.headerDateEditor}>
@@ -521,7 +540,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
             setErrorMessage(null);
           }}
           onSubmitEditing={handleSubmit}
-          placeholder="15시 회의"
+          placeholder="민수랑 토요일 7시 강남 · 카톡 대화를 붙여넣어도 돼요"
           placeholderTextColor={colors.warmGray}
           style={styles.quickAddInput}
           returnKeyType="done"
@@ -561,7 +580,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
             style={[styles.eventCard, { borderLeftColor: getEventColor(item) }]}
           >
             <View style={styles.eventCardBody}>
-              <Text style={styles.eventCategory}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
+              <View style={styles.eventCategoryRow}><View style={[styles.eventCategoryDot,{backgroundColor:getCategory(item.category,userCategories)?.color||'#B9ADA2'}]}/><Text style={styles.eventCategory}>{getCategory(item.category,userCategories)?.label ?? CATEGORY_LABEL[item.category] ?? item.category}</Text></View>
               <Text style={styles.eventTitle}>{item.title}</Text>
               <Text style={styles.eventTime}>
                 {item.time} · {item.durationMin}분
@@ -571,6 +590,17 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
               <Pressable testID={`delete-${item.id}`} onPress={() => handleDelete(item)} style={styles.deleteButton}>
                 <Text style={styles.deleteButtonText}>×</Text>
               </Pressable>
+              <View style={styles.notificationToggle}>
+                <Text style={styles.notificationToggleText}>{item.notificationEnabled===false?'알림 OFF':'알림 ON'}</Text>
+                <Switch
+                  testID={`notification-${item.id}`}
+                  accessibilityLabel={`${item.title} 개별 알림 ${item.notificationEnabled===false?'켜기':'끄기'}`}
+                  value={item.notificationEnabled!==false}
+                  onValueChange={notificationEnabled=>setEvents(prev=>prev.map(event=>event.id===item.id?{...event,notificationEnabled}:event))}
+                  trackColor={{false:'#D8CEC4',true:'#D79A7F'}}
+                  thumbColor="#FFF9F2"
+                />
+              </View>
               <View style={styles.secondaryButtonRow}>
                 <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
                   <Text style={styles.editButtonText}>수정</Text>
@@ -602,9 +632,21 @@ const styles = StyleSheet.create({
   page: {
     flex: 1,
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 980,
     paddingHorizontal: 20,
   },
+  calendarHero:{flexDirection:'row',alignItems:'flex-end',gap:16,flexWrap:'wrap',marginTop:18,marginBottom:14},
+  calendarEyebrow:{fontSize:10,letterSpacing:1.5,color:'#9B6C51',fontWeight:'700'},
+  calendarTitle:{fontSize:28,fontWeight:'800',color:colors.textDark,marginTop:5},
+  calendarSubtitle:{fontSize:13,color:colors.warmGray,marginTop:5},
+  manageCategoryButton:{backgroundColor:'#EFE2D5',paddingVertical:9,paddingHorizontal:13,borderRadius:12},
+  manageCategoryButtonText:{fontSize:12,color:colors.textDark,fontWeight:'700'},
+  categoryBoard:{flexDirection:'row',flexWrap:'wrap',gap:9,marginBottom:18},
+  categoryCard:{minWidth:118,maxWidth:175,flexGrow:1,backgroundColor:'#FFFAF4',borderWidth:1,borderColor:'#E5D8CB',borderTopWidth:4,borderTopColor:'#D5C7BA',borderRadius:15,paddingVertical:11,paddingHorizontal:12},
+  categoryCardSelected:{borderColor:colors.terracotta,backgroundColor:'#F9EDE4'},
+  categoryColorBar:{width:42,height:8,borderRadius:4},
+  categoryName:{fontSize:13,fontWeight:'700',color:colors.textDark,marginTop:5},
+  categoryCount:{fontSize:10,color:colors.warmGray,marginTop:3},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -893,6 +935,15 @@ const styles = StyleSheet.create({
     color: colors.warmGray,
     fontSize: 16,
     lineHeight: 16,
+  },
+  notificationToggle: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  notificationToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.warmGray,
   },
   secondaryButtonRow: {
     flexDirection: 'row',

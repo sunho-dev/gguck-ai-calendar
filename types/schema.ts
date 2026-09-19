@@ -2,6 +2,26 @@ export type ISODate = string // "2026-09-17"
 export type ISOTime = string // "19:00"
 export type ISODateTime = string // "2026-09-17T19:00:00+09:00"
 
+
+export type BaseCategory = 'exercise' | 'work' | 'personal' | 'study' | 'health'
+
+/**
+ * 사용자가 직접 만드는 생활 카테고리. Event.category에는 이 id가 저장된다.
+ * baseCategory는 기존 규칙 엔진/AI 분류와 연결하기 위한 내부 분류라 화면에서는 강조하지 않는다.
+ */
+export interface UserCategory {
+  id: string
+  label: string
+  /** @deprecated 기존 저장 데이터 호환용. 화면에서는 사용하지 않습니다. */
+  emoji?: string
+  color: string
+  baseCategory: BaseCategory
+  defaultReminderMin: number
+  notificationEnabled: boolean
+  keywords: string[]
+  createdAt: ISODateTime
+}
+
 export interface Event {
   id: string
   userId: string
@@ -13,6 +33,7 @@ export interface Event {
   durationMin: number
   place: { name: string; address: string | null; lat: number; lng: number } | null // 장소 없는 일정도, 주소 모르는 장소도 있음
   remindMin: number
+  notificationEnabled?: boolean // 개별 일정 알림 ON/OFF. 기존 일정은 undefined를 ON으로 취급
   bufferMin: number
   createdFrom: 'share' | 'paste' | 'text' | 'voice'
   sharedWith: string[]

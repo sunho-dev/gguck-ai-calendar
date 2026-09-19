@@ -10,10 +10,11 @@ import {useStoredEvents} from '../utils/useStoredEvents';
 const PRIVACY_POLICY_URL = 'https://sites.google.com/view/intelpartners';
 const TERMS_OF_SERVICE_URL = 'https://sites.google.com/view/intelpartnersyakgwan';
 
-export type NavKey = 'calendar' | 'assistant' | 'rules' | 'alerts';
+export type NavKey = 'calendar' | 'categories' | 'assistant' | 'rules' | 'alerts';
 
 export const NAV_ITEMS: { key: NavKey; label: string; icon: string }[] = [
   { key: 'calendar', label: '나의 캘린더', icon: '▦' },
+  { key: 'categories', label: '내 카테고리', icon: '●' },
   { key: 'assistant', label: '일정 비서', icon: '✦' },
   { key: 'rules', label: '나의 규칙', icon: '≡' },
   { key: 'alerts', label: '알림함', icon: '◷' },
