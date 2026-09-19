@@ -16,6 +16,22 @@ export const NAV_ITEMS: { key: NavKey; label: string; icon: string }[] = [
   { key: 'alerts', label: '알림함', icon: '◷' },
 ];
 
+// 유니코드 기호(▦)는 바둑판 무늬로 보여서, 실제 달력처럼 보이도록 테두리+상단 헤더 띠+
+// 날짜 점 3개로 직접 그린다. Text 기반 아이콘과 달리 선택 시 색이 하얗게 바뀌어야 해서
+// color를 prop으로 받아 View 스타일에 직접 꽂는다.
+function CalendarNavIcon({ color }: { color: string }) {
+  return (
+    <View style={[styles.calendarIcon, { borderColor: color }]}>
+      <View style={[styles.calendarIconHeader, { backgroundColor: color }]} />
+      <View style={styles.calendarIconDots}>
+        <View style={[styles.calendarIconDot, { backgroundColor: color }]} />
+        <View style={[styles.calendarIconDot, { backgroundColor: color }]} />
+        <View style={[styles.calendarIconDot, { backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+}
+
 export function Sidebar({
   active,
   onSelect,
@@ -51,7 +67,13 @@ export function Sidebar({
             const selected = item.key === active;
             const content = (
               <>
-                <Text style={[styles.navIcon, selected && styles.navTextActive]}>{item.icon}</Text>
+                {item.key === 'calendar' ? (
+                  <View style={styles.navIconWrapper}>
+                    <CalendarNavIcon color={selected ? colors.white : colors.warmGray} />
+                  </View>
+                ) : (
+                  <Text style={[styles.navIcon, selected && styles.navTextActive]}>{item.icon}</Text>
+                )}
                 {!compact && (
                   <Text style={[styles.navLabel, selected && styles.navTextActive]}>{item.label}{item.key==='alerts'?` ${alertCount}`:''}</Text>
                 )}
@@ -168,6 +190,37 @@ const styles = StyleSheet.create({
     color: colors.warmGray,
     width: 24,
     textAlign: 'center',
+  },
+  navIconWrapper: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarIcon: {
+    width: 19,
+    height: 19,
+    borderWidth: 1.6,
+    borderRadius: 4,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 3,
+  },
+  calendarIconHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 5,
+  },
+  calendarIconDots: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  calendarIconDot: {
+    width: 2.5,
+    height: 2.5,
+    borderRadius: 1.25,
   },
   navLabel: {
     fontSize: 14,

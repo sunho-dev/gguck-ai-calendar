@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {check} from '../utils/scheduler';
 import {toSchedule,loadRules} from '../utils/scheduleAdapter';
@@ -7,7 +7,6 @@ import { GlossyBox } from '../components/GlossyBox';
 import { colors } from '../constants/colors';
 import koreanHolidays from '../data/koreanHolidays.json';
 import type { Event } from '../types/schema';
-import { buildGoogleCalendarLink } from '../utils/googleCalendarLink';
 import {
   addDays,
   addMonths,
@@ -261,10 +260,11 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   };
 
   const handleSubmit = async () => {
-    if (!editingId) {
+    const toAssistant = () => {
       const dated=/오늘|내일|모레|다음.*주|이번.*주|매주|매일|매월|평일|\d{4}-\d{2}-\d{2}/.test(inputText);
-      onCompose(dated?inputText:selectedDate+' '+inputText);return;
-    }
+      onCompose(dated?inputText:selectedDate+' '+inputText);
+    };
+
     const text = inputText.trim();
     if (!text || isSubmitting) return;
 
@@ -273,26 +273,13 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
     setIsSubmitting(false);
 
     if (!resolved) {
+      // 몇 시인지 등 정보가 불명확해서 확인이 필요한 경우에만 일정비서로 넘긴다.
+      if (!editingId) { toAssistant(); return; }
       setErrorMessage('몇 시인지 알려주세요. 예: 15시 회의');
       return;
     }
 
-    if (editingId) {
-      const existing = events.find((event) => event.id === editingId);
-      if (!existing) {
-        resetEntry();
-        return;
-      }
-      const updated: Event = { ...existing, ...resolved, ruleExceptions:[], startDate: selectedDate, endDate: selectedDate };
-      const verdict=check(toSchedule(updated),events.map(toSchedule),loadRules());
-      if(!verdict.ok){setErrorMessage(verdict.reasons.map(r=>r.message).join(' '));return;}
-      setEvents((prev) => prev.map((event) => (event.id === editingId ? updated : event)));
-      if (googleStatus.connected) {
-        runGoogleSync(() => syncEventUpdate(updated)).then((googleEventId) => {
-          if (googleEventId) applyGoogleEventId(updated.id, googleEventId);
-        });
-      }
-    } else {
+    if (!editingId) {
       const newEvent: Event = {
         id: generateEventId(),
         userId: 'local',
@@ -302,12 +289,35 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
         sharedWith: [],
         ...resolved,
       };
+      const verdict = check(toSchedule(newEvent), events.map(toSchedule), loadRules());
+      if (!verdict.ok) {
+        // 규칙에 걸리는 등 확인이 필요한 경우도 일정비서의 "꾹이 확인할게요" 흐름으로 넘긴다.
+        toAssistant();
+        return;
+      }
       setEvents((prev) => [...prev, newEvent]);
       if (googleStatus.connected) {
         runGoogleSync(() => syncEventCreate(newEvent)).then((googleEventId) => {
           if (googleEventId) applyGoogleEventId(newEvent.id, googleEventId);
         });
       }
+      resetEntry();
+      return;
+    }
+
+    const existing = events.find((event) => event.id === editingId);
+    if (!existing) {
+      resetEntry();
+      return;
+    }
+    const updated: Event = { ...existing, ...resolved, ruleExceptions:[], startDate: selectedDate, endDate: selectedDate };
+    const verdict=check(toSchedule(updated),events.map(toSchedule),loadRules());
+    if(!verdict.ok){setErrorMessage(verdict.reasons.map(r=>r.message).join(' '));return;}
+    setEvents((prev) => prev.map((event) => (event.id === editingId ? updated : event)));
+    if (googleStatus.connected) {
+      runGoogleSync(() => syncEventUpdate(updated)).then((googleEventId) => {
+        if (googleEventId) applyGoogleEventId(updated.id, googleEventId);
+      });
     }
     resetEntry();
   };
@@ -559,13 +569,6 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
                 <Text style={styles.deleteButtonText}>×</Text>
               </Pressable>
               <View style={styles.secondaryButtonRow}>
-                <Pressable
-                  testID={`gcal-${item.id}`}
-                  onPress={() => Linking.openURL(buildGoogleCalendarLink(item))}
-                  style={styles.editButton}
-                >
-                  <Text style={styles.editButtonText}>구글</Text>
-                </Pressable>
                 <Pressable testID={`edit-${item.id}`} onPress={() => handleEdit(item)} style={styles.editButton}>
                   <Text style={styles.editButtonText}>수정</Text>
                 </Pressable>
