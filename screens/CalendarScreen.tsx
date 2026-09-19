@@ -966,10 +966,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 8,
   },
+  eventCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  eventCategoryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   eventCategory: {
     fontSize: 11,
     color: colors.warmGray,
-    marginBottom: 4,
   },
   eventTitle: {
     fontSize: 16,
