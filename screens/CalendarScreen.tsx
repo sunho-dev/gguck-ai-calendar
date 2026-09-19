@@ -155,7 +155,7 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
   const CATEGORY_COLLAPSE_THRESHOLD = 6;
   const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const canCollapseCategories = userCategories.length > CATEGORY_COLLAPSE_THRESHOLD;
-  const visibleCategories = canCollapseCategories && !categoriesExpanded ? userCategories.slice(0, CATEGORY_COLLAPSE_THRESHOLD) : userCategories;
+  const visibleCategories = canCollapseCategories && !categoriesExpanded ? [] : userCategories;
   const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? []);
   const [shiftColors] = useState(() => loadShiftColors());
   const getEventColor = (event: Event): string =>
@@ -431,8 +431,13 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
         <View style={styles.heroButtonRow}>
           <Pressable onPress={onCategories} style={styles.manageCategoryButton}><Text style={styles.manageCategoryButtonText}>＋ 카테고리</Text></Pressable>
           {canCollapseCategories && (
-            <Pressable onPress={()=>setCategoriesExpanded(v=>!v)} style={styles.manageCategoryButton}>
-              <Text style={styles.manageCategoryButtonText}>{categoriesExpanded?'카테고리 접기':'카테고리 펼치기'}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={categoriesExpanded?'카테고리 접기':'카테고리 펼치기'}
+              onPress={()=>setCategoriesExpanded(v=>!v)}
+              style={styles.categoryToggleButton}
+            >
+              <Text style={styles.categoryToggleButtonText}>{categoriesExpanded?'▲':'▼'}</Text>
             </Pressable>
           )}
         </View>
@@ -732,6 +737,8 @@ const styles = StyleSheet.create({
   calendarTitle:{fontSize:28,fontWeight:'800',color:colors.textDark,marginTop:5},
   calendarSubtitle:{fontSize:13,color:colors.warmGray,marginTop:5},
   heroButtonRow:{flexDirection:'row',gap:8},
+  categoryToggleButton:{backgroundColor:'#EFE2D5',width:34,height:34,borderRadius:12,alignItems:'center',justifyContent:'center'},
+  categoryToggleButtonText:{fontSize:12,color:colors.textDark,fontWeight:'700'},
   manageCategoryButton:{backgroundColor:'#EFE2D5',paddingVertical:9,paddingHorizontal:13,borderRadius:12},
   manageCategoryButtonText:{fontSize:12,color:colors.textDark,fontWeight:'700'},
   categoryBoard:{flexDirection:'row',flexWrap:'wrap',gap:9,marginBottom:18},
