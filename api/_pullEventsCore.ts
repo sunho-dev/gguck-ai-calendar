@@ -59,12 +59,18 @@ export function toDraft(item: GoogleEventItem): PulledEventDraft | null {
   const endDateOnly = item.end?.date
 
   if (startDateTime && endDateTime) {
+    const startDate = toDatePart(startDateTime)
+    let endDate = toDatePart(endDateTime)
+    // 시간이 지정된 일정이 여러 날에 걸칠 수 있다(예: 24일 09:00 ~ 26일 18:00 여행).
+    // 종료 시각이 자정 정각이면 그 날은 실제로 포함되지 않으니 하루 앞당긴다.
+    if (endDate > startDate && toTimePart(endDateTime) === '00:00') endDate = addDays(endDate, -1)
+    if (endDate < startDate) endDate = startDate
     return {
       googleEventId: item.id,
       cancelled: false,
       title: item.summary?.trim() || '(제목 없음)',
-      startDate: toDatePart(startDateTime),
-      endDate: toDatePart(startDateTime),
+      startDate,
+      endDate,
       time: toTimePart(startDateTime),
       durationMin: diffMinutes(startDateTime, endDateTime),
       place: item.location ? { name: item.location, address: null } : null,
@@ -116,8 +122,12 @@ function initialWindow(): { timeMin: string; timeMax: string } {
   }
 }
 
+// forceFull: 이미 syncToken이 있어도 무시하고 전체를 다시 받는다. 증분 동기화는 "바뀐"
+// 일정만 보내주기 때문에, 예전에 잘못 저장된 일정(예: 기간이 하루로 잘린 것)은 구글 쪽이
+// 바뀌지 않는 한 영영 다시 오지 않아서 고칠 방법이 없다.
 export async function pullGoogleCalendarEvents(
-  account: StoredGoogleAccount
+  account: StoredGoogleAccount,
+  options: { forceFull?: boolean } = {}
 ): Promise<{ events: PulledEventDraft[]; resyncedFromScratch: boolean }> {
   const accessToken = await ensureFreshAccessToken(account)
   const calendarId = account.connectedCalendarId
@@ -151,7 +161,7 @@ export async function pullGoogleCalendarEvents(
   let resyncedFromScratch = false
   let result
   try {
-    result = await fetchAll(account.pullSyncToken)
+    result = await fetchAll(options.forceFull ? undefined : account.pullSyncToken)
   } catch (err) {
     if (!(err instanceof SyncTokenExpiredError)) throw err
     resyncedFromScratch = true

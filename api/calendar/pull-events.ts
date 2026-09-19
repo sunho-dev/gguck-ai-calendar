@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { events } = await pullGoogleCalendarEvents(account)
+    const { events } = await pullGoogleCalendarEvents(account, { forceFull: req.query.full === '1' })
     res.status(200).json({ connected: true, events } satisfies PullResponseBody)
   } catch (err) {
     console.error('[pull-events] 오류:', err)
