@@ -53,6 +53,46 @@ export function Sidebar({
     window.location.reload();
   };
 
+  if (compact) {
+    const mobileLabels: Record<NavKey, string> = {
+      calendar: '캘린더',
+      categories: '카테고리',
+      assistant: '비서',
+      rules: '규칙',
+      alerts: '알림',
+    };
+
+    return (
+      <View style={styles.bottomNav}>
+        {NAV_ITEMS.map((item) => {
+          const selected = item.key === active;
+          const iconColor = selected ? colors.terracotta : colors.warmGray;
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              key={item.key}
+              onPress={() => onSelect(item.key)}
+              style={[styles.bottomNavItem, selected && styles.bottomNavItemActive]}
+            >
+              {item.key === 'calendar' ? (
+                <CalendarNavIcon color={iconColor} />
+              ) : (
+                <Text style={[styles.bottomNavIcon, selected && styles.bottomNavTextActive]}>
+                  {item.icon}
+                </Text>
+              )}
+              <Text style={[styles.bottomNavLabel, selected && styles.bottomNavTextActive]}>
+                {mobileLabels[item.key]}
+                {item.key === 'alerts' && alertCount > 0 ? ` ${alertCount}` : ''}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
       <View>
@@ -311,5 +351,43 @@ const styles = StyleSheet.create({
   legalDivider: {
     fontSize: 10,
     color: colors.warmGray,
+  },
+  bottomNav: {
+    width: '100%',
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: colors.lightBeige,
+    borderTopWidth: 1,
+    borderTopColor: '#E5D8CB',
+    paddingHorizontal: 4,
+    paddingTop: 6,
+    paddingBottom: 6,
+  },
+  bottomNavItem: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    borderRadius: 12,
+    paddingVertical: 5,
+  },
+  bottomNavItemActive: {
+    backgroundColor: '#F3E3D7',
+  },
+  bottomNavIcon: {
+    fontSize: 19,
+    color: colors.warmGray,
+    lineHeight: 22,
+  },
+  bottomNavLabel: {
+    fontSize: 10,
+    color: colors.warmGray,
+    fontWeight: '600',
+  },
+  bottomNavTextActive: {
+    color: colors.terracotta,
+    fontWeight: '800',
   },
 });

@@ -31,7 +31,7 @@ export default function App() {
   const [assistantText, setAssistantText] = useState(() => readSharedText() ?? '');
   const [activeNav, setActiveNav] = useState<NavKey>(()=>readSharedText()?'assistant':'calendar');
   const { width } = useWindowDimensions();
-  const compactSidebar = width < 700;
+  const mobile = width < 700;
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.search) {
@@ -45,8 +45,8 @@ export default function App() {
         <StatusBar style="dark" />
         <GoogleConnectBanner />
         <ReminderSync />
-        <View style={styles.shell}>
-          <Sidebar active={activeNav} onSelect={setActiveNav} compact={compactSidebar} />
+        <View style={[styles.shell, mobile && styles.shellMobile]}>
+          {!mobile && <Sidebar active={activeNav} onSelect={setActiveNav} compact={false} />}
           <View style={styles.main}>
             {activeNav === 'calendar' ? (
               <CalendarScreen onCompose={text=>{setAssistantText(text);setActiveNav('assistant');}} onCategories={()=>setActiveNav('categories')} />
@@ -58,6 +58,7 @@ export default function App() {
               activeNav==='rules'?<RulesScreen />:<AlertsScreen onCompose={()=>setActiveNav('assistant')} />
             )}
           </View>
+          {mobile && <Sidebar active={activeNav} onSelect={setActiveNav} compact />}
         </View>
       </SafeAreaView>
     </SafeAreaProvider>
@@ -72,6 +73,9 @@ const styles = StyleSheet.create({
   shell: {
     flex: 1,
     flexDirection: 'row',
+  },
+  shellMobile: {
+    flexDirection: 'column',
   },
   main: {
     flex: 1,

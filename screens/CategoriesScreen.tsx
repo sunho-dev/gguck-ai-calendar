@@ -1,5 +1,5 @@
 import {useMemo,useState} from 'react';
-import {Modal,Pressable,ScrollView,StyleSheet,Switch,Text,TextInput,View} from 'react-native';
+import {Modal,Pressable,ScrollView,StyleSheet,Switch,Text,TextInput,View,useWindowDimensions} from 'react-native';
 import {colors,shiftColorPalette} from '../constants/colors';
 import type {BaseCategory,UserCategory} from '../types/schema';
 import {DEFAULT_CATEGORIES,inferBaseCategory,loadCategories,makeCategoryId,saveCategories} from '../utils/categoryStore';
@@ -22,6 +22,8 @@ function emptyDraft():UserCategory{
 }
 
 export function CategoriesScreen({onCalendar=()=>{}}:{onCalendar?:()=>void}){
+ const {width}=useWindowDimensions();
+ const mobile=width<700;
  const categories=useCategories();
  const events=useStoredEvents();
  const [draft,setDraft]=useState<UserCategory|null>(null);
@@ -53,21 +55,30 @@ export function CategoriesScreen({onCalendar=()=>{}}:{onCalendar?:()=>void}){
   setDraft(null);
  };
 
- return <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-  <View style={styles.hero}>
-   <View style={{flex:1,minWidth:0}}><Text style={styles.eyebrow}>MY LIFE, MY CALENDAR</Text><Text style={styles.heading}>내 생활을 카테고리로 나눠보세요.</Text><Text style={styles.subtitle}>클라이밍, 취업, 친구, 게임처럼 내가 쓰는 말로 만들면 꾹이 대화를 읽고 알맞은 곳에 일정을 정리해요.</Text></View>
-   <Pressable onPress={openNew} style={styles.primary}><Text style={styles.primaryText}>＋ 카테고리 만들기</Text></Pressable>
+ return <ScrollView
+  style={styles.page}
+  contentContainerStyle={[styles.content,mobile&&styles.contentMobile]}
+ >
+  <View style={[styles.hero,mobile&&styles.heroMobile]}>
+   <View style={{flex:1,minWidth:0}}>
+    <Text style={styles.eyebrow}>MY LIFE, MY CALENDAR</Text>
+    <Text style={[styles.heading,mobile&&styles.headingMobile]}>
+     {mobile?<>내 생활을{'\n'}카테고리로 나눠보세요.</>:'내 생활을 카테고리로 나눠보세요.'}
+    </Text>
+    <Text style={[styles.subtitle,mobile&&styles.subtitleMobile]}>클라이밍, 취업, 친구, 게임처럼 내가 쓰는 말로 만들면 꾹이 대화를 읽고 알맞은 곳에 일정을 정리해요.</Text>
+   </View>
+   <Pressable onPress={openNew} style={[styles.primary,mobile&&styles.primaryMobile]}><Text style={styles.primaryText}>＋ 카테고리 만들기</Text></Pressable>
   </View>
 
-  <View style={styles.grid}>
-   {categories.map(c=><Pressable key={c.id} onPress={()=>openEdit(c)} style={[styles.card,{borderTopColor:c.color}]}>
+  <View style={[styles.grid,mobile&&styles.gridMobile]}>
+   {categories.map(c=><Pressable key={c.id} onPress={()=>openEdit(c)} style={[styles.card,mobile&&styles.cardMobile,{borderTopColor:c.color}]}>
     <View style={styles.cardTop}><View style={[styles.categoryColorMark,{backgroundColor:c.color}]}/><Text style={styles.colorCode}>{c.color.toUpperCase()}</Text></View>
     <Text style={styles.cardTitle}>{c.label}</Text>
     <Text style={styles.count}>{stats.get(c.id)||0}개의 일정</Text>
     <View style={styles.meta}><Text style={styles.metaText}>알림 {c.notificationEnabled?'ON':'OFF'}</Text><Text style={styles.metaText}>{c.defaultReminderMin===0?'시작 시간':`${c.defaultReminderMin}분 전`}</Text></View>
     {!!c.keywords.length&&<Text style={styles.keywords} numberOfLines={2}>AI 키워드 · {c.keywords.slice(0,4).join(' · ')}</Text>}
    </Pressable>)}
-   <Pressable onPress={openNew} style={[styles.card,styles.addCard]}><Text style={styles.addPlus}>＋</Text><Text style={styles.addText}>내 카테고리 추가</Text><Text style={styles.addHint}>내 생활에 맞는 분류를 직접 만들어요.</Text></Pressable>
+   <Pressable onPress={openNew} style={[styles.card,styles.addCard,mobile&&styles.cardMobile]}><Text style={styles.addPlus}>＋</Text><Text style={styles.addText}>내 카테고리 추가</Text><Text style={styles.addHint}>내 생활에 맞는 분류를 직접 만들어요.</Text></Pressable>
   </View>
 
   <View style={styles.infoBox}><Text style={styles.infoTitle}>카테고리가 어떻게 쓰이나요?</Text><Text style={styles.infoText}>“내일 저녁 8시 더클라임”을 붙여넣으면 → 내가 지정한 색의 클라이밍 카테고리로 자동 분류 → 기본 알림 적용 → 캘린더에 저장돼요.</Text><Pressable onPress={onCalendar} style={styles.secondary}><Text style={styles.secondaryText}>나의 캘린더 보기</Text></Pressable></View>
@@ -95,5 +106,23 @@ export function CategoriesScreen({onCalendar=()=>{}}:{onCalendar?:()=>void}){
 }
 
 const styles=StyleSheet.create({
- page:{width:'100%',maxWidth:1180},content:{padding:28,paddingBottom:60},hero:{flexDirection:'row',gap:20,alignItems:'flex-end',marginBottom:26,flexWrap:'wrap'},eyebrow:{fontSize:11,letterSpacing:1.6,color:'#9B6C51',fontWeight:'700'},heading:{fontSize:30,fontWeight:'800',color:colors.textDark,marginTop:8,marginBottom:8},subtitle:{fontSize:14,lineHeight:23,color:colors.warmGray,maxWidth:700},primary:{backgroundColor:colors.terracotta,paddingVertical:12,paddingHorizontal:18,borderRadius:14,alignItems:'center'},primaryText:{color:colors.white,fontWeight:'700'},secondary:{backgroundColor:'#EFE2D5',paddingVertical:12,paddingHorizontal:18,borderRadius:14,alignItems:'center'},secondaryText:{color:colors.textDark,fontWeight:'600'},grid:{flexDirection:'row',flexWrap:'wrap',gap:14},card:{width:220,minHeight:176,backgroundColor:'#FFFAF4',borderWidth:1,borderColor:'#E5D8CB',borderTopWidth:5,borderRadius:20,padding:18},cardTop:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},categoryColorMark:{width:54,height:16,borderRadius:8},colorCode:{fontSize:10,color:colors.warmGray,fontWeight:'600'},cardTitle:{fontSize:19,fontWeight:'700',color:colors.textDark,marginTop:15},count:{fontSize:12,color:colors.warmGray,marginTop:5},meta:{flexDirection:'row',gap:7,marginTop:14,flexWrap:'wrap'},metaText:{fontSize:11,color:'#765D4E',backgroundColor:'#F2E7DC',paddingHorizontal:8,paddingVertical:5,borderRadius:10},keywords:{fontSize:11,lineHeight:17,color:colors.warmGray,marginTop:11},addCard:{borderTopColor:'#D9CBBE',borderStyle:'dashed',alignItems:'center',justifyContent:'center'},addPlus:{fontSize:30,color:colors.terracotta},addText:{fontSize:15,fontWeight:'700',color:colors.textDark,marginTop:6},addHint:{fontSize:11,color:colors.warmGray,marginTop:5,textAlign:'center'},infoBox:{marginTop:28,backgroundColor:'#F2E7DC',borderRadius:20,padding:22},infoTitle:{fontSize:16,fontWeight:'700',color:colors.textDark},infoText:{fontSize:13,lineHeight:22,color:colors.warmGray,marginVertical:10},overlay:{flex:1,backgroundColor:'#0007',alignItems:'center',justifyContent:'center',padding:20},dialog:{width:'100%',maxWidth:620,maxHeight:'92%',backgroundColor:colors.cream,borderRadius:24},dialogTitle:{fontSize:24,fontWeight:'800',color:colors.textDark,marginBottom:12},label:{fontSize:12,fontWeight:'600',color:'#745B4C',marginTop:14,marginBottom:7},input:{backgroundColor:'#FFFAF4',borderWidth:1,borderColor:'#E5D8CB',borderRadius:12,paddingHorizontal:13,paddingVertical:11,fontSize:15,color:colors.textDark},row:{flexDirection:'row',flexWrap:'wrap',gap:8},colorEditor:{flexDirection:'row',alignItems:'center',gap:14,marginBottom:10},colorPreview:{width:58,height:58,borderRadius:16,borderWidth:1,borderColor:'#DCCBBC'},swatch:{width:32,height:32,borderRadius:10,borderWidth:2,borderColor:'transparent'},swatchSelected:{borderColor:'#4A3F38'},pill:{borderWidth:1,borderColor:'#DCCBBC',paddingHorizontal:11,paddingVertical:8,borderRadius:18,backgroundColor:'#FFF9F2'},pillActive:{backgroundColor:colors.terracotta,borderColor:colors.terracotta},pillText:{fontSize:12,color:colors.textDark},pillTextActive:{fontSize:12,color:colors.white,fontWeight:'700'},help:{fontSize:11,lineHeight:18,color:colors.warmGray,marginTop:6},switchRow:{flexDirection:'row',alignItems:'center',gap:14,marginTop:20,padding:14,backgroundColor:'#F2E7DC',borderRadius:14},switchTitle:{fontSize:14,fontWeight:'700',color:colors.textDark},actionRow:{flexDirection:'row',justifyContent:'flex-end',gap:10,marginTop:22},delete:{marginTop:16,padding:12,alignItems:'center'},deleteText:{fontSize:12,color:'#A24B3C'},error:{color:'#A54130',marginTop:12,fontSize:12}
+ page:{width:'100%',maxWidth:1180},
+ content:{padding:28,paddingBottom:60},
+ contentMobile:{paddingHorizontal:18,paddingTop:22,paddingBottom:28},
+ hero:{flexDirection:'row',gap:20,alignItems:'flex-end',marginBottom:26,flexWrap:'wrap'},
+ heroMobile:{flexDirection:'column',alignItems:'stretch',gap:18,marginBottom:22},
+ eyebrow:{fontSize:11,letterSpacing:1.6,color:'#9B6C51',fontWeight:'700'},
+ heading:{fontSize:30,fontWeight:'800',color:colors.textDark,marginTop:8,marginBottom:8},
+ headingMobile:{fontSize:34,lineHeight:43,letterSpacing:-1.2,marginTop:10,marginBottom:10},
+ subtitle:{fontSize:14,lineHeight:23,color:colors.warmGray,maxWidth:700},
+ subtitleMobile:{fontSize:15,lineHeight:25,maxWidth:'100%'},
+ primary:{backgroundColor:colors.terracotta,paddingVertical:12,paddingHorizontal:18,borderRadius:14,alignItems:'center'},
+ primaryMobile:{width:'100%',minHeight:52,justifyContent:'center'},
+ primaryText:{color:colors.white,fontWeight:'700'},
+ secondary:{backgroundColor:'#EFE2D5',paddingVertical:12,paddingHorizontal:18,borderRadius:14,alignItems:'center'},
+ secondaryText:{color:colors.textDark,fontWeight:'600'},
+ grid:{flexDirection:'row',flexWrap:'wrap',gap:14},
+ gridMobile:{flexDirection:'column',gap:16},
+ card:{width:220,minHeight:176,backgroundColor:'#FFFAF4',borderWidth:1,borderColor:'#E5D8CB',borderTopWidth:5,borderRadius:20,padding:18},
+ cardMobile:{width:'100%',minWidth:0,minHeight:164,padding:20},cardTop:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},categoryColorMark:{width:54,height:16,borderRadius:8},colorCode:{fontSize:10,color:colors.warmGray,fontWeight:'600'},cardTitle:{fontSize:19,fontWeight:'700',color:colors.textDark,marginTop:15},count:{fontSize:12,color:colors.warmGray,marginTop:5},meta:{flexDirection:'row',gap:7,marginTop:14,flexWrap:'wrap'},metaText:{fontSize:11,color:'#765D4E',backgroundColor:'#F2E7DC',paddingHorizontal:8,paddingVertical:5,borderRadius:10},keywords:{fontSize:11,lineHeight:17,color:colors.warmGray,marginTop:11},addCard:{borderTopColor:'#D9CBBE',borderStyle:'dashed',alignItems:'center',justifyContent:'center'},addPlus:{fontSize:30,color:colors.terracotta},addText:{fontSize:15,fontWeight:'700',color:colors.textDark,marginTop:6},addHint:{fontSize:11,color:colors.warmGray,marginTop:5,textAlign:'center'},infoBox:{marginTop:28,backgroundColor:'#F2E7DC',borderRadius:20,padding:22},infoTitle:{fontSize:16,fontWeight:'700',color:colors.textDark},infoText:{fontSize:13,lineHeight:22,color:colors.warmGray,marginVertical:10},overlay:{flex:1,backgroundColor:'#0007',alignItems:'center',justifyContent:'center',padding:20},dialog:{width:'100%',maxWidth:620,maxHeight:'92%',backgroundColor:colors.cream,borderRadius:24},dialogTitle:{fontSize:24,fontWeight:'800',color:colors.textDark,marginBottom:12},label:{fontSize:12,fontWeight:'600',color:'#745B4C',marginTop:14,marginBottom:7},input:{backgroundColor:'#FFFAF4',borderWidth:1,borderColor:'#E5D8CB',borderRadius:12,paddingHorizontal:13,paddingVertical:11,fontSize:15,color:colors.textDark},row:{flexDirection:'row',flexWrap:'wrap',gap:8},colorEditor:{flexDirection:'row',alignItems:'center',gap:14,marginBottom:10},colorPreview:{width:58,height:58,borderRadius:16,borderWidth:1,borderColor:'#DCCBBC'},swatch:{width:32,height:32,borderRadius:10,borderWidth:2,borderColor:'transparent'},swatchSelected:{borderColor:'#4A3F38'},pill:{borderWidth:1,borderColor:'#DCCBBC',paddingHorizontal:11,paddingVertical:8,borderRadius:18,backgroundColor:'#FFF9F2'},pillActive:{backgroundColor:colors.terracotta,borderColor:colors.terracotta},pillText:{fontSize:12,color:colors.textDark},pillTextActive:{fontSize:12,color:colors.white,fontWeight:'700'},help:{fontSize:11,lineHeight:18,color:colors.warmGray,marginTop:6},switchRow:{flexDirection:'row',alignItems:'center',gap:14,marginTop:20,padding:14,backgroundColor:'#F2E7DC',borderRadius:14},switchTitle:{fontSize:14,fontWeight:'700',color:colors.textDark},actionRow:{flexDirection:'row',justifyContent:'flex-end',gap:10,marginTop:22},delete:{marginTop:16,padding:12,alignItems:'center'},deleteText:{fontSize:12,color:'#A24B3C'},error:{color:'#A54130',marginTop:12,fontSize:12}
 });
