@@ -195,11 +195,14 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i)), [today]);
   const monthGrid = useMemo(() => buildMonthGrid(viewedMonth), [viewedMonth]);
 
+  // 하루짜리 일정은 기존처럼 작은 점으로, 여러 날짜에 걸친 일정(예: 3박 여행)은
+  // 아래 multiDayLaneOf에서 이어지는 색 막대로 따로 그린다 — 겹쳐서 두 번 표시되지
+  // 않도록 여기서는 하루짜리(startDate===endDate)만 대상으로 한다.
   const eventColorsOn = (date: string): string[] => {
     const seen = new Set<string>();
     const result: string[] = [];
     for (const event of events) {
-      if (event.cancelledAt || event.startDate > date || event.endDate < date || (selectedCategory!=='all'&&event.category!==selectedCategory)) continue;
+      if (event.cancelledAt || event.startDate !== event.endDate || event.startDate > date || event.endDate < date || (selectedCategory!=='all'&&event.category!==selectedCategory)) continue;
       const color = getEventColor(event);
       if (!seen.has(color)) {
         seen.add(color);
@@ -208,6 +211,35 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
     }
     return result;
   };
+
+  const MAX_MULTIDAY_LANES = 2;
+  // 여러 날짜에 걸친 일정끼리 겹칠 때 같은 일정이 매일 같은 줄(레인)에 그려지도록
+  // 미리 배정해둔다 — 이걸 안 하면 날짜마다 다른 줄에 배정되어 막대가 하루씩 위아래로
+  // 어긋나 보인다. 구간이 겹치지 않는 일정끼리는 같은 레인을 재사용한다.
+  const multiDayLaneOf = useMemo(() => {
+    const laneOf = new Map<string, number>();
+    if (monthGrid.length === 0) return laneOf;
+    const gridStart = monthGrid[0];
+    const gridEnd = monthGrid[monthGrid.length - 1];
+    const candidates = events
+      .filter((e) => !e.cancelledAt && e.startDate !== e.endDate && e.startDate <= gridEnd && e.endDate >= gridStart && (selectedCategory === 'all' || e.category === selectedCategory))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || b.endDate.localeCompare(a.endDate) || a.id.localeCompare(b.id));
+    const laneEnds: string[] = [];
+    for (const e of candidates) {
+      let lane = laneEnds.findIndex((end) => end < e.startDate);
+      if (lane === -1) {
+        lane = laneEnds.length;
+        laneEnds.push(e.endDate);
+      } else {
+        laneEnds[lane] = e.endDate;
+      }
+      laneOf.set(e.id, lane);
+    }
+    return laneOf;
+  }, [events, monthGrid, selectedCategory]);
+  const maxMultiDayLane = multiDayLaneOf.size ? Math.max(...multiDayLaneOf.values()) : -1;
+  const multiDayEventsOn = (date: string) =>
+    events.filter((e) => !e.cancelledAt && e.startDate !== e.endDate && e.startDate <= date && e.endDate >= date && (selectedCategory === 'all' || e.category === selectedCategory));
 
   const holidayName = HOLIDAYS[selectedDate];
   const eventsForDay = events
@@ -516,11 +548,31 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
                 </Text>
               );
               const dayColors = eventColorsOn(date);
+              const multiDayToday = multiDayEventsOn(date);
               return (
                 <Pressable key={date} onPress={() => setSelectedDate(date)} style={styles.monthCell}>
                   <View style={[styles.monthCellCircle, selected && styles.monthCellCircleSelected]}>
                     {cellText}
                   </View>
+                  {maxMultiDayLane >= 0 && (
+                    <View style={styles.monthCellBars}>
+                      {Array.from({ length: Math.min(maxMultiDayLane + 1, MAX_MULTIDAY_LANES) }, (_, lane) => {
+                        const event = multiDayToday.find((e) => multiDayLaneOf.get(e.id) === lane);
+                        if (!event) return <View key={lane} style={styles.monthCellBarEmpty} />;
+                        return (
+                          <View
+                            key={lane}
+                            style={[
+                              styles.monthCellBar,
+                              { backgroundColor: getEventColor(event) },
+                              event.startDate === date && styles.monthCellBarStart,
+                              event.endDate === date && styles.monthCellBarEnd,
+                            ]}
+                          />
+                        );
+                      })}
+                    </View>
+                  )}
                   {dayColors.length > 0 && (
                     <View style={styles.monthCellBlocks}>
                       {dayColors.slice(0, 3).map((color, index) => (
@@ -855,6 +907,31 @@ const styles = StyleSheet.create({
     width: 13,
     height: 5,
     borderRadius: 2.5,
+  },
+  monthCellBars: {
+    width: '100%',
+    marginTop: 6,
+    gap: 3,
+  },
+  // 셀에 좌우 여백이 없어서(monthCell에 paddingHorizontal 없음) 이 막대가 폭 100%로
+  // 옆 날짜 셀과 틈 없이 맞닿는다 — 그 덕에 여러 날짜에 걸친 일정이 하루하루 끊긴
+  // 점이 아니라 하나로 이어진 막대처럼 보인다. 진짜 시작/끝나는 날에만 둥글게 마감하고,
+  // 중간(또는 주가 바뀌어 다음 줄로 넘어가는 지점)은 각지게 두어 계속된다는 인상을 준다.
+  monthCellBar: {
+    width: '100%',
+    height: 7,
+  },
+  monthCellBarStart: {
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
+  },
+  monthCellBarEnd: {
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  monthCellBarEmpty: {
+    width: '100%',
+    height: 7,
   },
   quickAddRow: {
     flexDirection: 'row',
