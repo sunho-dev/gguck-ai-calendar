@@ -114,7 +114,12 @@ export function ShareCalendarModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <Text style={styles.heading}>일정 공유하기</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.heading}>근무 공유하기</Text>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <Text style={styles.closeX}>×</Text>
+            </Pressable>
+          </View>
           <Text style={styles.subheading}>가져오기로 등록한 근무 일정만 공유돼요. 직접 등록한 개인 일정은 포함되지 않아요.</Text>
 
           <View ref={captureRef} style={styles.card} collapsable={false}>
@@ -180,10 +185,6 @@ export function ShareCalendarModal({
           </View>
 
           {!!notice && <Text style={styles.notice}>{notice}</Text>}
-
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeButtonText}>닫기</Text>
-          </Pressable>
         </View>
       </View>
     </Modal>
@@ -205,11 +206,21 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
   heading: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.textDark,
-    marginBottom: 4,
+  },
+  closeX: {
+    color: colors.warmGray,
+    fontSize: 20,
+    lineHeight: 20,
   },
   subheading: {
     fontSize: 12,
@@ -338,15 +349,5 @@ const styles = StyleSheet.create({
     marginTop: 14,
     lineHeight: 18,
     textAlign: 'center',
-  },
-  closeButton: {
-    marginTop: 16,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: 13,
-    color: colors.warmGray,
-    fontWeight: '600',
   },
 });

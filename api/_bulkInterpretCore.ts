@@ -13,6 +13,9 @@ export interface BulkDraftEvent {
 const BULK_EVENTS_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
+    // myName이 주어졌는데 자료 어디서도 그 사람을 찾지 못했을 때만 false. myName이 없거나
+    // 정상적으로 찾았으면 true — 이 필드로 "엉뚱한 사람 일정을 대신 가져오는" 것을 막는다.
+    nameFound: { type: Type.BOOLEAN },
     events: {
       type: Type.ARRAY,
       items: {
@@ -41,7 +44,7 @@ const BULK_EVENTS_SCHEMA: Schema = {
       },
     },
   },
-  required: ['events'],
+  required: ['nameFound', 'events'],
 }
 
 function buildSystemPrompt(nowIso: string, hint: 'table' | 'photo', myName?: string): string {
@@ -81,9 +84,12 @@ function buildSystemPrompt(nowIso: string, hint: 'table' | 'photo', myName?: str
       '',
       '--- 여러 사람의 일정이 섞여 있을 때 ---',
       `이 자료에는 여러 사람의 일정/근무가 함께 표시되어 있을 수 있다. 사용자 본인의 이름(또는 표기)은 "${myName.trim()}"이다.`,
-      '표에 이름으로 구분된 행/열/구역이 있으면, 반드시 이 이름에 해당하는 부분만 추출하고 다른 사람의 일정은 결과에 포함하지 마라.',
-      '이름이 어디에도 안 보이거나 누구 것인지 구분이 안 되면, 억지로 걸러내지 말고 보이는 일정을 모두 추출하라.'
+      '표에 이름으로 구분된 행/열/구역이 있으면, 반드시 이 이름과 정확히 일치하거나 명백히 동일 인물로 보이는(예: 성을 뺀 표기) 행/열/구역만 찾아 그 부분만 추출하라.',
+      `이 이름이 자료 어디에도 전혀 보이지 않으면, 절대로 다른 사람의 일정을 대신 추출하거나 아무 행이나 임의로 고르지 말고 nameFound를 false로, events는 빈 배열([])로 반환하라.`,
+      '표 자체에 이름 구분이 전혀 없는 자료(원래 한 사람 것만 있는 표/사진)라면 이 규칙과 무관하니 nameFound를 true로 하고 보이는 일정을 그대로 추출하라.'
     )
+  } else {
+    lines.push('', 'myName이 주어지지 않았으니 nameFound는 항상 true로 채워라.')
   }
 
   return lines.join('\n')
@@ -126,7 +132,11 @@ async function callGemini(
     throw new Error('AI 응답에서 결과를 찾을 수 없습니다.')
   }
 
-  const parsed = JSON.parse(responseText) as { events: BulkDraftEvent[] }
+  const parsed = JSON.parse(responseText) as { nameFound: boolean; events: BulkDraftEvent[] }
+
+  if (myName && myName.trim() && parsed.nameFound === false) {
+    throw new InterpretRefusedError('이름을 정확히 입력해 주세요.')
+  }
 
   // format 검증을 스키마에서 뺀 대신, 여기서 관대하게 정리한다. 날짜를 못 알아보는
   // 항목은 통째로 실패시키지 않고 그 항목만 걸러낸다.

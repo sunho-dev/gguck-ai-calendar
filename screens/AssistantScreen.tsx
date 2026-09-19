@@ -138,6 +138,24 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    setImportSource('엑셀 샘플에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
   }catch(err){setIsImporting(false);console.warn('[demo-excel] 실패:',err);setImportError(err instanceof Error?err.message:'엑셀 샘플을 처리하는 데 실패했어요.');}
  };
+ const handleDemoPhoto=async()=>{
+  setImportError(null);
+  try{
+   setIsImporting(true);
+   const response=await fetch('/demo/schedule-photo.jpg');
+   const blob=await response.blob();
+   const base64=await new Promise<string>((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onloadend=()=>resolve((reader.result as string).split(',')[1]);
+    reader.onerror=reject;
+    reader.readAsDataURL(blob);
+   });
+   const drafts=await interpretBulkImage(base64,'image/jpeg',myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('사진 샘플에서 일정을 찾지 못했어요.');return;}
+   setImportSource('사진 샘플에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
+  }catch(err){setIsImporting(false);console.warn('[demo-photo] 실패:',err);setImportError(err instanceof Error?err.message:'사진 샘플을 처리하는 데 실패했어요.');}
+ };
  const handleConfirmImport=async(approved:Event[])=>{
   const shiftLike=importDrafts?isShiftLikeImport(importDrafts):false;
   const created:Event[]=approved.map(e=>shiftLike?{...e,shiftType:extractShiftLabel(e.title)}:e);
@@ -249,10 +267,13 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {field('표/사진 속 내 이름',myName,handleMyNameChange)}
  {!importDrafts&&<View style={styles.row}>
  {button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}
- <Choice label="ics 샘플 사용해보기" disabled={isImporting} onPress={()=>handleDemoIcs()}/>
  {button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}
- <Choice label="엑셀 샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoExcel()}/>
  {button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}
+ </View>}
+ {!importDrafts&&<View style={styles.row}>
+ <Choice label="ics 샘플 사용해보기" disabled={isImporting} onPress={()=>handleDemoIcs()}/>
+ <Choice label="엑셀 샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoExcel()}/>
+ <Choice label="사진 샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoPhoto()}/>
  </View>}
  {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
  {!!importError&&<Text style={styles.notice}>{importError}</Text>}
