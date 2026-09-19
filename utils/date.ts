@@ -74,3 +74,14 @@ export function addMinutesToTime(date: ISODate, time: ISOTime, minutes: number):
   const newTime = `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`
   return { date: dayOffset ? addDays(date, dayOffset) : date, time: newTime }
 }
+
+// 등록 확인 알림 등 사용자에게 보여줄 자연스러운 한국어 날짜/시간 표현.
+// 예: "9월 22일 오후 7시", "9월 22일 오후 7시 30분"
+export function formatFriendlyDateTime(date: ISODate, time: ISOTime): string {
+  const [, month, day] = date.split('-').map(Number)
+  const [hour, minute] = time.split(':').map(Number)
+  const period = hour < 12 ? '오전' : '오후'
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12
+  const minuteText = minute ? ` ${minute}분` : ''
+  return `${month}월 ${day}일 ${period} ${hour12}시${minuteText}`
+}
