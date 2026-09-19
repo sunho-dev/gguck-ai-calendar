@@ -24,6 +24,7 @@ export interface Event {
   cancelledAt?: string
   ruleExceptions?: string[]
   reminderMessage?: string
+  shiftType?: import('../utils/shiftColorStore').ShiftType // 가져온 일정의 근무 유형(데이/이브닝/나이트/휴일) 색 표시용, 규칙 엔진의 category와는 별개
 }
 
 /**
