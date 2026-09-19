@@ -41,7 +41,7 @@ export function Sidebar({
           {!compact && (
             <View>
               <Text style={styles.brandText}>kkuk</Text>
-              <Text style={styles.brandSubtitle}>가볍게 말하고, 꾹.</Text>
+              <Text style={styles.brandSubtitle}>꾹 눌러서 빠르게, 간편하게</Text>
             </View>
           )}
         </View>
@@ -164,9 +164,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   navIcon: {
-    fontSize: 16,
+    fontSize: 21,
     color: colors.warmGray,
-    width: 18,
+    width: 24,
     textAlign: 'center',
   },
   navLabel: {

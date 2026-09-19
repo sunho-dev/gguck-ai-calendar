@@ -8,7 +8,6 @@ export function AppLogo({ size = 34 }: { size?: number }) {
       colors={['#d99a7d', '#b76f54']}
       shadowColor="#9f6b42"
       borderRadius={size * 0.35}
-      bordered
       style={{ width: size, height: size }}
     >
       <Text style={[styles.text, { fontSize: size * 0.42 }]}>꾹</Text>

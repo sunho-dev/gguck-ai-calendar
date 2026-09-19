@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {check} from '../utils/scheduler';
 import {toSchedule,loadRules} from '../utils/scheduleAdapter';
@@ -26,6 +26,7 @@ import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { mergeGoogleEvents, pullGoogleEvents } from '../utils/googlePull';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
 import { loadShiftColors } from '../utils/shiftColorStore';
+import { ShareCalendarModal } from '../components/ShareCalendarModal';
 
 interface ResolvedEntry {
   title: string;
@@ -157,6 +158,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
 
   useEffect(() => {
     saveStoredEvents(events);
@@ -390,6 +392,12 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
         </View>
       </View>
 
+      {Platform.OS === 'web' && (
+        <Pressable style={styles.shareRowButton} onPress={() => setShareModalVisible(true)}>
+          <Text style={styles.shareRowButtonText}>일정 공유하기</Text>
+        </Pressable>
+      )}
+
       {viewMode === 'week' ? (
         <View style={styles.dayStrip}>
           {weekDays.map((date) => {
@@ -572,6 +580,14 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
           {pendingSyncCount > 0 ? '구글 캘린더와 동기화 중…' : '✓ 구글 캘린더와 동기화 완료'}
         </Text>
       ) : null}
+
+      <ShareCalendarModal
+        visible={shareModalVisible}
+        onClose={() => setShareModalVisible(false)}
+        events={events}
+        viewedMonth={viewMode === 'month' ? viewedMonth : startOfMonth(selectedDate)}
+        shiftColors={shiftColors}
+      />
     </View>
   );
 }
@@ -645,6 +661,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lightBeige,
     borderRadius: 10,
     padding: 3,
+  },
+  shareRowButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.lightBeige,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  shareRowButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textDark,
   },
   toggleButton: {
     paddingVertical: 5,
