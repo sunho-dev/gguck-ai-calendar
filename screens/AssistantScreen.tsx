@@ -53,6 +53,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  const [name,setName]=useState(''),[address,setAddress]=useState(''),[category,setCategory]=useState<Category>('personal'),[remember,setRemember]=useState(true);
  const [issues,setIssues]=useState<string[]>([]),[choices,setChoices]=useState<Schedule[]>([]),[skipped,setSkipped]=useState<string[]>([]);
  const [cancelChoices,setCancelChoices]=useState<Schedule[]>([]),[target,setTarget]=useState<Schedule|null>(null),[scope,setScope]=useState<Scope>('one');
+ const [selectedCancelIds,setSelectedCancelIds]=useState<Set<string>>(new Set());
  const [importDrafts,setImportDrafts]=useState<ImportedEventDraft[]|null>(null),[importSource,setImportSource]=useState<string|null>(null);
  const [importError,setImportError]=useState<string|null>(null),[isImporting,setIsImporting]=useState(false),[myName,setMyName]=useState(()=>loadMyName());
  const [shiftColors,setShiftColors]=useState<ShiftColorMap>(()=>loadShiftColors());
@@ -166,9 +167,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
 
   const status=await getGoogleSyncStatus();
   if(!status.connected)return;
-  let synced=0;
-  for(const e of created){const id=await syncEventCreate(e);if(id){synced++;saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}}
-  setNotice(`로컬 ${created.length}개 등록 · Google ${synced}개 반영${synced<created.length?' · 일부 동기화 실패: Google 캘린더를 확인해 주세요.':''}`);
+  for(const e of created){const id=await syncEventCreate(e);if(id)saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}
  };
  useScheduleStaging(async({text:input})=>{
   if(lock.current||draft||target||cancelChoices.length)throw Error('현재 확인 중인 요청을 먼저 마쳐 주세요.');
@@ -179,7 +178,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   if(result.unknown){setUnknown(result.unknown);setName('');setAddress('');setCategory(result.event.category);setRemember(true);}
   return {status:result.unknown?'clarification_required':'staged',draft:result.event};
  });
- const close=()=>{if(lock.current)return;setDraft(null);setCategoryOverride(null);setUnknown(null);setTarget(null);setCancelChoices([]);setIssues([]);setChoices([]);setSkipped([]);setFailure('');};
+ const close=()=>{if(lock.current)return;setDraft(null);setCategoryOverride(null);setUnknown(null);setTarget(null);setCancelChoices([]);setSelectedCancelIds(new Set());setIssues([]);setChoices([]);setSkipped([]);setFailure('');};
  async function guarded(job:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setFailure('');try{await job();}catch(e){setFailure(e instanceof Error?e.message:'처리하지 못했어요.');}finally{lock.current=false;setBusy(false);}}
  async function persist(schedules:Schedule[]){
   const rules=loadRules(),seriesId=schedules[0]?.recurrence?`series-${Date.now()}`:undefined;
@@ -201,9 +200,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   const confirmMessage=`${when}에 ${created[0].title}으로 일정이 등록되었습니다${countSuffix}`;
   setNotice(`${confirmMessage}${warningText}`);
   const status=await getGoogleSyncStatus();if(!status.connected)return;
-  let synced=0;
-  for(const e of created){const id=await syncEventCreate(e);if(id){synced++;saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}}
-  setNotice(`${confirmMessage} · Google ${synced}/${created.length} 반영${synced<created.length?' (일부 동기화 실패, 캘린더를 확인해 주세요)':''}${warningText}`);
+  for(const e of created){const id=await syncEventCreate(e);if(id)saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}
  }
  async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
   setChoices([]);setIssues([]);
@@ -234,6 +231,19 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   setNotice(`${done}개 일정 취소 완료`);setTarget(null);setCancelChoices([]);setText('');
   setSelectedDate(t.date);
  }
+ // 카테고리·제목이 겹쳐 여러 일정이 후보로 나왔을 때, 사용자가 체크박스로 고른
+ // 항목들을 한 번에 취소한다. 이미 정확한 대상 id들을 알고 있으므로(선택 자체가
+ // 곧 대상 지정) cancellationTargets의 반복 범위 확장은 쓰지 않고 고른 항목만 지운다.
+ async function cancelSelected(items:Schedule[]){
+  const ids=new Set(items.map(i=>i.id));
+  const entries=all().filter(e=>ids.has(e.id));let done=0;
+  for(const entry of entries){
+   if(entry.googleEventId)await syncEventDelete(entry);
+   saveStoredEvents(all().map(e=>e.id===entry.id?{...e,cancelledAt:new Date().toISOString()}:e));done++;
+  }
+  setNotice(`${done}개 일정 취소 완료`);setCancelChoices([]);setSelectedCancelIds(new Set());setText('');
+  if(items[0])setSelectedDate(items[0].date);
+ }
  // Schedule/규칙 엔진은 하루짜리 일정만 알아서, 여행처럼 기간이 있는 일정은 그 경로를
  // 안 태우고 Event를 직접 만들어 저장한다(가져오기 일정과 동일한 방식). 규칙 검사는
  // 애초에 기간 일정을 모델링하지 못해 건너뛴다.
@@ -253,7 +263,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   setNotice(confirmMessage);
   const status=await getGoogleSyncStatus();if(!status.connected)return;
   const googleEventId=await syncEventCreate(created);
-  if(googleEventId){saveStoredEvents(all().map(x=>x.id===created.id?{...x,googleEventId}:x));setNotice(`${confirmMessage} · Google 반영 완료`);}
+  if(googleEventId)saveStoredEvents(all().map(x=>x.id===created.id?{...x,googleEventId}:x));
  }
  async function submit(){await guarded(async()=>{
   setNotice('');setCategoryOverride(null);setSkipped([]);setIssues([]);setChoices([]);
@@ -261,7 +271,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    const r=findCancellation(normalizeChat(text),all().map(toSchedule));setScope(r.scope);
    if(!r.matches.length)throw Error('일치하는 일정이 없어요.');
    if(r.matches.length===1&&!r.matches[0].seriesId){await cancel(r.matches[0],'one');return;}
-   if(r.matches.length===1)setTarget(r.matches[0]);else setCancelChoices(r.matches);return;
+   if(r.matches.length===1)setTarget(r.matches[0]);else{setSelectedCancelIds(new Set());setCancelChoices(r.matches);}return;
   }
   const aliases=(await getPlaceAliases()).map(a=>({term:a.alias,meaning:a.name,location:a.address||a.name,category:categoryKey(a.category||'personal')}));
   let event:Schedule,unrecognized:string|null=null,needsReview=false;
@@ -344,7 +354,14 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  <Text>{target.title} · {target.date} {target.time}</Text><Text>어느 범위를 취소할까요?</Text>
  {(['one','following','all'] as Scope[]).map((s,i)=><View key={s}>{button((scope===s?'✓ ':'')+['이번만','선택 회차 및 이후','전체 반복'][i],()=>setScope(s),true)}</View>)}
  {button(`${cancellationTargets(all().map(toSchedule),target,scope).length}개 취소 확인`,()=>void guarded(()=>cancel(target,scope)))}
- </>:cancelChoices.map(c=><View key={c.id}>{button(`${c.date} ${c.time} · ${c.title}`,()=>{if(c.seriesId){setCancelChoices([]);setTarget(c);}else void guarded(()=>cancel(c,'one'));},true)}</View>)}
+ </>:cancelChoices.length?<>
+ <Text style={styles.label}>취소할 일정을 선택하세요 ({selectedCancelIds.size}/{cancelChoices.length}개 선택)</Text>
+ {cancelChoices.map(c=>{const checked=!!c.id&&selectedCancelIds.has(c.id);return <Pressable key={c.id} accessibilityRole="checkbox" accessibilityState={{checked}} onPress={()=>{if(!c.id)return;setSelectedCancelIds(prev=>{const next=new Set(prev);next.has(c.id!)?next.delete(c.id!):next.add(c.id!);return next;});}} style={[styles.categoryChoice,checked&&styles.categoryChoiceSelected]}>
+  <Text style={styles.categoryChoiceText}>{checked?'✓ ':'☐ '}{c.date} {c.time||'시간 미정'} · {c.title}</Text>
+ </Pressable>;})}
+ <View style={styles.row}>{button(selectedCancelIds.size===cancelChoices.length?'전체 해제':'전체 선택',()=>setSelectedCancelIds(selectedCancelIds.size===cancelChoices.length?new Set():new Set(cancelChoices.map(c=>c.id).filter((id):id is string=>!!id))),true)}</View>
+ {button(`선택한 ${selectedCancelIds.size}개 취소`,()=>void guarded(()=>cancelSelected(cancelChoices.filter(c=>!!c.id&&selectedCancelIds.has(c.id)))),false,!selectedCancelIds.size)}
+ </>:null}
  {button('닫기',close,true)}
  {!!failure&&<Text accessibilityRole="alert" style={styles.notice}>{failure}</Text>}
  </ScrollView></View></Modal></ScrollView></>;
