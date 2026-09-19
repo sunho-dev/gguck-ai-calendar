@@ -13,9 +13,9 @@ export interface PulledEventDraft {
   place: { name: string; address: string | null } | null
 }
 
-export async function pullGoogleEvents(): Promise<PulledEventDraft[]> {
+export async function pullGoogleEvents(forceFull = false): Promise<PulledEventDraft[]> {
   try {
-    const res = await fetch(`/api/calendar/pull-events?userId=${getAnonUserId()}`)
+    const res = await fetch(`/api/calendar/pull-events?userId=${getAnonUserId()}${forceFull ? '&full=1' : ''}`)
     if (!res.ok) return []
     const body = (await res.json()) as { connected: boolean; events: PulledEventDraft[] }
     return body.connected ? body.events : []

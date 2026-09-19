@@ -183,9 +183,30 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
     if (!googleStatus.connected) return;
     const POLL_INTERVAL_MS = 60_000;
 
+    // 기간이 있는 구글 일정이 하루로 잘려 저장되던 버그를 고친 뒤, 이미 그렇게 저장된
+    // 일정은 증분 동기화로는 다시 오지 않아서 브라우저당 딱 한 번 전체를 다시 받아 바로잡는다.
+    const RESYNC_KEY = 'gguck-google-full-resync-v1';
+    let needsFullResync = false;
+    try {
+      needsFullResync = window.localStorage.getItem(RESYNC_KEY) !== 'done';
+    } catch {
+      needsFullResync = false;
+    }
+
     let cancelled = false;
     const pull = async () => {
-      const drafts = await pullGoogleEvents();
+      const forceFull = needsFullResync;
+      const drafts = await pullGoogleEvents(forceFull);
+      if (forceFull) {
+        // 실패해도 같은 세션에서 매분 전체를 다시 받지 않도록 시도 자체는 여기서 끝내고,
+        // 완료 표시는 실제로 일정을 받아왔을 때만 남겨서 다음 접속 때 재시도할 수 있게 한다.
+        needsFullResync = false;
+        if (drafts.length > 0) {
+          try {
+            window.localStorage.setItem(RESYNC_KEY, 'done');
+          } catch {}
+        }
+      }
       if (cancelled || drafts.length === 0) return;
       setEvents((prev) => mergeGoogleEvents(prev, drafts));
     };
@@ -201,7 +222,7 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i)), [today]);
   const monthGrid = useMemo(() => buildMonthGrid(viewedMonth), [viewedMonth]);
 
-  // 하루짜리 일정은 기존처럼 작은 점으로, 여러 날짜에 걸친 일정(예: 3박 여행)은
+  // 하루짜리 일정은 기존처럼 작은 점으로, 여러 날짜에 걸친 일정은
   // 아래 multiDayLaneOf에서 이어지는 색 막대로 따로 그린다 — 겹쳐서 두 번 표시되지
   // 않도록 여기서는 하루짜리(startDate===endDate)만 대상으로 한다.
   const eventColorsOn = (date: string): string[] => {
