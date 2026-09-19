@@ -9,6 +9,7 @@ import {ColorDropdown} from '../components/ColorDropdown';
 import {RuleAwareImportReview} from '../components/RuleAwareImportReview';
 import {Choice,RepeatChoices,RepeatFields,recurrenceFor,type RepeatMode} from '../components/ScheduleControls';
 import {useScheduleStaging} from '../utils/useScheduleStaging';
+import {formatFriendlyDateTime} from '../utils/date';
 import {colors} from '../constants/colors';
 import type {Event} from '../types/schema';
 import {interpretEvent} from '../utils/interpretEvent';
@@ -180,11 +181,14 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   saveStoredEvents([...all(),...created]);
   setSelectedDate(created[0].startDate);
   setDraft(null);setIssues([]);setChoices([]);setSkipped([]);setText('');
-  setNotice(`‘${created[0].title}’ ${created.length}개 등록 완료 · ${created[0].startDate} ${created[0].time} · 알림 ${created[0].remindMin}분 전${warningText}`);
+  const when=formatFriendlyDateTime(created[0].startDate,created[0].time);
+  const countSuffix=created.length>1?` 외 ${created.length-1}건`:'';
+  const confirmMessage=`${when}에 ${created[0].title}으로 일정이 등록되었습니다${countSuffix}`;
+  setNotice(`${confirmMessage}${warningText}`);
   const status=await getGoogleSyncStatus();if(!status.connected)return;
   let synced=0;
   for(const e of created){const id=await syncEventCreate(e);if(id){synced++;saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}}
-  setNotice(`로컬 ${created.length}개 등록 · Google ${synced}개 반영${synced<created.length?' · 일부 동기화 실패: Google 캘린더를 확인해 주세요.':''}${warningText}`);
+  setNotice(`${confirmMessage} · Google ${synced}/${created.length} 반영${synced<created.length?' (일부 동기화 실패, 캘린더를 확인해 주세요)':''}${warningText}`);
  }
  async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
   setChoices([]);setIssues([]);
