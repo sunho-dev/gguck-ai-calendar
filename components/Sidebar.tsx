@@ -105,38 +105,38 @@ export function Sidebar({
             );
           })}
         </View>
-      </View>
 
-      <Pressable
-        onPress={googleStatus.connected ? undefined : startGoogleConnect}
-        style={[styles.googleRow, compact && styles.googleRowCompact]}
-      >
-        <View style={styles.googleIcon}>
-          <Text style={styles.googleIconText}>G</Text>
-        </View>
-        {!compact && (
-          <View style={styles.googleTextGroup}>
-            <Text style={styles.googleTitle}>Google Calendar</Text>
-            <Text style={styles.googleSubtitle}>
-              {googleStatus.connected ? (
-                <>
-                  {`연동됨 · ${googleStatus.email} · `}
-                  <Text onPress={handleDisconnect} style={styles.googleDisconnectLink}>
-                    다시 눌러서 취소
-                  </Text>
-                </>
-              ) : (
-                '미연결 · 눌러서 연동'
-              )}
-            </Text>
+        <Pressable
+          onPress={googleStatus.connected ? undefined : startGoogleConnect}
+          style={[styles.googleRow, compact && styles.googleRowCompact]}
+        >
+          <View style={styles.googleIcon}>
+            <Text style={styles.googleIconText}>G</Text>
           </View>
-        )}
-        {compact && (
-          <Text style={styles.googleCompactStatus} numberOfLines={1}>
-            {googleStatus.connected ? '연동됨' : '미연결'}
-          </Text>
-        )}
-      </Pressable>
+          {!compact && (
+            <View style={styles.googleTextGroup}>
+              <Text style={styles.googleTitle}>Google Calendar</Text>
+              <Text style={styles.googleSubtitle}>
+                {googleStatus.connected ? (
+                  <>
+                    {`연동됨 · ${googleStatus.email} · `}
+                    <Text onPress={handleDisconnect} style={styles.googleDisconnectLink}>
+                      다시 눌러서 취소
+                    </Text>
+                  </>
+                ) : (
+                  '미연결 · 눌러서 연동'
+                )}
+              </Text>
+            </View>
+          )}
+          {compact && (
+            <Text style={styles.googleCompactStatus} numberOfLines={1}>
+              {googleStatus.connected ? '연동됨' : '미연결'}
+            </Text>
+          )}
+        </Pressable>
+      </View>
 
       <View style={[styles.legalRow, compact && styles.legalRowCompact]}>
         <Pressable onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
@@ -249,6 +249,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 6,
     paddingVertical: 8,
+    marginTop: 12,
   },
   googleRowCompact: {
     flexDirection: 'column',
