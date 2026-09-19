@@ -262,11 +262,10 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  async function acceptExceptions(){if(!draft||!canExcept)return;await guarded(()=>proceed({...draft,ruleExceptions:[...new Set([...(draft.ruleExceptions||[]),...exceptionReasons.map(r=>r.ruleId!)])]},true));}
  return <ScrollView style={styles.page} contentContainerStyle={{paddingBottom:40}}><Text style={styles.heading}>일정은 꾹에게 맡겨요.</Text><Text style={styles.label}>한 줄로 남기면, 시간과 규칙을 함께 살펴볼게요.</Text>
  <View style={[styles.columns,wide&&{flexDirection:'row'}]}><View style={{flex:wide?1.35:undefined,minWidth:0}}><View style={styles.panel}><Text style={styles.sectionTitle}>어떤 일정이 있나요?</Text>
- <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder="내일 오후 8시 집에서 운동" editable={!busy}/>
+ <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder={'EX) 내일 오후 8시 집에서 운동\nEX) 매주 월수금 오후 8시 운동\nEX) 다음주 금요일 8시 종숲 ㄱ\nEX) 내일 운동 취소'} placeholderTextColor="rgba(136,120,110,0.45)" editable={!busy}/>
  {!hasCancelIntent(text)&&<><Text style={styles.label}>반복 방식</Text><RepeatChoices value={repeatMode} onChange={setRepeatMode} disabled={busy}/><Text style={styles.label}>문장에 적은 반복 조건이 우선해요.</Text></>}
  {button(busy?'처리 중…':hasCancelIntent(text)?'요청 보내기':'일정 등록',()=>void submit())}
- <Text style={styles.label}>확인이 필요할 때만 물어봐요. 소요 시간 생략 시 60분.</Text>
- <Text style={styles.sectionTitle}>이렇게 말해보세요</Text><View style={styles.row}>{['내일 오후 8시 운동','매주 월수금 오후 8시 운동','다음주 금요일 8시 종숲 ㄱ','내일 운동 취소'].map(example=><Choice key={example} label={example} disabled={busy} onPress={()=>{setText(example);setRepeatMode('none');}}/>)}</View></View>
+ <Text style={styles.label}>확인이 필요할 때만 물어봐요. 소요 시간 생략 시 60분.</Text></View>
  {Platform.OS==='web'&&<View style={[styles.panel,styles.importPanel]}><Text style={styles.sectionTitle}>여러 일정 한 번에 가져오기</Text><Text style={styles.label}>.ics 파일, 근무표 엑셀, 근무표 사진에서 일정을 한 번에 뽑아 등록해요.</Text>
  {field('표/사진 속 내 이름',myName,handleMyNameChange)}
  {!importDrafts&&<View style={styles.row}>
