@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../constants/colors';
 import { disconnectGoogle, startGoogleConnect } from '../utils/googleSync';
@@ -6,6 +6,9 @@ import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { AppLogo } from './AppLogo';
 import { GlossyBox } from './GlossyBox';
 import {useStoredEvents} from '../utils/useStoredEvents';
+
+const PRIVACY_POLICY_URL = 'https://sites.google.com/view/intelpartners';
+const TERMS_OF_SERVICE_URL = 'https://sites.google.com/view/intelpartnersyakgwan';
 
 export type NavKey = 'calendar' | 'assistant' | 'rules' | 'alerts';
 
@@ -134,6 +137,16 @@ export function Sidebar({
           </Text>
         )}
       </Pressable>
+
+      <View style={[styles.legalRow, compact && styles.legalRowCompact]}>
+        <Pressable onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+          <Text style={styles.legalLink}>{compact ? '방침' : '개인정보처리방침'}</Text>
+        </Pressable>
+        {!compact && <Text style={styles.legalDivider}>·</Text>}
+        <Pressable onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}>
+          <Text style={styles.legalLink}>{compact ? '약관' : '이용약관'}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -276,5 +289,25 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: colors.warmGray,
     textAlign: 'center',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingTop: 8,
+    paddingHorizontal: 6,
+  },
+  legalRowCompact: {
+    gap: 4,
+  },
+  legalLink: {
+    fontSize: 10,
+    color: colors.warmGray,
+    textDecorationLine: 'underline',
+  },
+  legalDivider: {
+    fontSize: 10,
+    color: colors.warmGray,
   },
 });
