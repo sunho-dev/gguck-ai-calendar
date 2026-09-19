@@ -83,6 +83,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  };
  const handleImportExcel=async()=>{
   setImportError(null);
+  if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
   const picked=await DocumentPicker.getDocumentAsync({type:'*/*'});
   if(picked.canceled)return;
   const asset=picked.assets[0];
@@ -104,6 +105,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  };
  const handleImportPhoto=async()=>{
   setImportError(null);
+  if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
   if(typeof window!=='undefined')window.alert('방향이 돌아가지 않고 선명하게 찍힌 사진으로 준비해주세요.');
   const picked=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],quality:1});
   if(picked.canceled)return;
@@ -130,6 +132,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  };
  const handleDemoExcel=async()=>{
   setImportError(null);
+  if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
   try{
    setIsImporting(true);
    const drafts=await interpretBulkTable(DEMO_EXCEL_CSV,myName);
@@ -140,6 +143,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  };
  const handleDemoPhoto=async()=>{
   setImportError(null);
+  if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
   try{
    setIsImporting(true);
    const response=await fetch('/demo/schedule-photo.jpg');
@@ -275,6 +279,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  <Choice label="엑셀 샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoExcel()}/>
  <Choice label="사진 샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoPhoto()}/>
  </View>}
+ {!importDrafts&&<Text style={styles.label}>엑셀, 사진 샘플을 사용할 땐 길선호, 김창민, 황수민 세 이름 중에 하나로 테스트해보세요.</Text>}
  {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
  {!!importError&&<Text style={styles.notice}>{importError}</Text>}
  {importDrafts&&isShiftLikeImport(importDrafts)&&<View style={styles.shiftColorPanel}>
