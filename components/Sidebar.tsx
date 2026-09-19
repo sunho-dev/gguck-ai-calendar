@@ -63,32 +63,58 @@ export function Sidebar({
     };
 
     return (
-      <View style={styles.bottomNav}>
-        {NAV_ITEMS.map((item) => {
-          const selected = item.key === active;
-          const iconColor = selected ? colors.terracotta : colors.warmGray;
-          return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-              key={item.key}
-              onPress={() => onSelect(item.key)}
-              style={[styles.bottomNavItem, selected && styles.bottomNavItemActive]}
-            >
-              {item.key === 'calendar' ? (
-                <CalendarNavIcon color={iconColor} />
-              ) : (
-                <Text style={[styles.bottomNavIcon, selected && styles.bottomNavTextActive]}>
-                  {item.icon}
-                </Text>
-              )}
-              <Text style={[styles.bottomNavLabel, selected && styles.bottomNavTextActive]}>
-                {mobileLabels[item.key]}
-                {item.key === 'alerts' && alertCount > 0 ? ` ${alertCount}` : ''}
-              </Text>
+      <View style={styles.bottomNavWrap}>
+        <View style={styles.mobileUtilityRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={googleStatus.connected ? 'Google 연동 해제' : 'Google 캘린더 연동'}
+            onPress={() => void (googleStatus.connected ? handleDisconnect() : startGoogleConnect())}
+            style={styles.mobileGoogleChip}
+          >
+            <View style={styles.mobileGoogleIcon}>
+              <Text style={styles.mobileGoogleIconText}>G</Text>
+            </View>
+            <Text style={styles.mobileGoogleText} numberOfLines={1}>
+              {googleStatus.connected ? '연동됨 · 눌러서 해제' : 'Google 연동'}
+            </Text>
+          </Pressable>
+          <View style={styles.mobileLegalGroup}>
+            <Pressable onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+              <Text style={styles.legalLink}>개인정보처리방침</Text>
             </Pressable>
-          );
-        })}
+            <Text style={styles.legalDivider}>·</Text>
+            <Pressable onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}>
+              <Text style={styles.legalLink}>이용약관</Text>
+            </Pressable>
+          </View>
+        </View>
+        <View style={styles.bottomNav}>
+          {NAV_ITEMS.map((item) => {
+            const selected = item.key === active;
+            const iconColor = selected ? colors.terracotta : colors.warmGray;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+                key={item.key}
+                onPress={() => onSelect(item.key)}
+                style={[styles.bottomNavItem, selected && styles.bottomNavItemActive]}
+              >
+                {item.key === 'calendar' ? (
+                  <CalendarNavIcon color={iconColor} />
+                ) : (
+                  <Text style={[styles.bottomNavIcon, selected && styles.bottomNavTextActive]}>
+                    {item.icon}
+                  </Text>
+                )}
+                <Text style={[styles.bottomNavLabel, selected && styles.bottomNavTextActive]}>
+                  {mobileLabels[item.key]}
+                  {item.key === 'alerts' && alertCount > 0 ? ` ${alertCount}` : ''}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     );
   }
@@ -351,6 +377,50 @@ const styles = StyleSheet.create({
   legalDivider: {
     fontSize: 10,
     color: colors.warmGray,
+  },
+  bottomNavWrap: {
+    width: '100%',
+  },
+  mobileUtilityRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.lightBeige,
+  },
+  mobileGoogleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+    maxWidth: '55%',
+  },
+  mobileGoogleIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  mobileGoogleIconText: {
+    fontWeight: '800',
+    fontSize: 9,
+    color: colors.textDark,
+  },
+  mobileGoogleText: {
+    fontSize: 10,
+    color: colors.warmGray,
+    flexShrink: 1,
+  },
+  mobileLegalGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   bottomNav: {
     width: '100%',
