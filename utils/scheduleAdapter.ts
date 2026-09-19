@@ -1,5 +1,5 @@
 import type { Event } from '../types/schema';
-import { categories, initialRules, restoreRules, type Category, type Rules, type Schedule } from './scheduler';
+import { categories, initialRules, restoreRules, reminderFor, type Category, type Rules, type Schedule } from './scheduler';
 import { generateEventId } from './quickEntry';
 
 export function categoryKey(value:string):Category {
@@ -16,8 +16,9 @@ export function toSchedule(e:Event):Schedule {
  return {...e,date:e.startDate,duration:e.durationMin+periodDays*1440,category:categoryKey(e.category),location:e.place?.name};
 }
 export function toEvent(s:Schedule,rules:Rules):Event {
+ const reminder=reminderFor(s,rules);
  return {id:generateEventId(),userId:'local',title:s.title,category:s.category,startDate:s.date,endDate:s.date,time:s.time,durationMin:s.duration,
- place:s.location?{name:s.location,address:null,lat:0,lng:0}:null,remindMin:rules.reminders[s.category],bufferMin:rules.gap,createdFrom:'text',sharedWith:[],seriesId:s.seriesId,recurrence:s.recurrence,aliasTerm:s.aliasTerm,aliasMeaning:s.aliasMeaning};
+ place:s.location?{name:s.location,address:null,lat:0,lng:0}:null,remindMin:reminder.minutes,reminderMessage:reminder.message,ruleExceptions:s.ruleExceptions,bufferMin:rules.gap,createdFrom:'text',sharedWith:[],seriesId:s.seriesId,recurrence:s.recurrence,aliasTerm:s.aliasTerm,aliasMeaning:s.aliasMeaning};
 }
 export function loadRules():Rules {try{return restoreRules(JSON.parse(window.localStorage.getItem('gguck:rules')||'{}'));}catch{return initialRules;}}
 export function saveRules(rules:Rules){window.localStorage.setItem('gguck:rules',JSON.stringify(rules));}

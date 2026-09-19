@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx expo export --platform web && cp dist/index.html dist/share-target.html",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "headers": [
     {

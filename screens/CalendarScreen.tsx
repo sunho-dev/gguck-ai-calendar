@@ -25,7 +25,7 @@ import { syncEventCreate, syncEventDelete, syncEventUpdate } from '../utils/goog
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { mergeGoogleEvents, pullGoogleEvents } from '../utils/googlePull';
 import { loadStoredEvents, saveStoredEvents } from '../utils/eventsStorage';
-import { loadShiftColors, type ShiftType } from '../utils/shiftColorStore';
+import { loadShiftColors } from '../utils/shiftColorStore';
 
 interface ResolvedEntry {
   title: string;
@@ -144,8 +144,8 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
   const googleStatus = useGoogleSyncStatus();
   const [events, setEvents] = useState<Event[]>(() => loadStoredEvents() ?? []);
   const [shiftColors] = useState(() => loadShiftColors());
-  const getCategoryColor = (category: string): string =>
-    shiftColors[category as ShiftType] ?? CATEGORY_COLOR[category] ?? colors.warmGray;
+  const getEventColor = (event: Event): string =>
+    (event.shiftType && shiftColors[event.shiftType]) || CATEGORY_COLOR[event.category] || colors.warmGray;
   const [selectedDate, setSelectedDate] = useState(today);
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [viewedMonth, setViewedMonth] = useState(() => startOfMonth(today));
@@ -191,7 +191,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
     const result: string[] = [];
     for (const event of events) {
       if (event.cancelledAt || event.startDate > date || event.endDate < date) continue;
-      const color = getCategoryColor(event.category);
+      const color = getEventColor(event);
       if (!seen.has(color)) {
         seen.add(color);
         result.push(color);
@@ -281,7 +281,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
         resetEntry();
         return;
       }
-      const updated: Event = { ...existing, ...resolved, startDate: selectedDate, endDate: selectedDate };
+      const updated: Event = { ...existing, ...resolved, ruleExceptions:[], startDate: selectedDate, endDate: selectedDate };
       const verdict=check(toSchedule(updated),events.map(toSchedule),loadRules());
       if(!verdict.ok){setErrorMessage(verdict.reasons.map(r=>r.message).join(' '));return;}
       setEvents((prev) => prev.map((event) => (event.id === editingId ? updated : event)));
@@ -537,7 +537,7 @@ export function CalendarScreen({onCompose}:{onCompose:(text:string)=>void}) {
         ListEmptyComponent={<Text style={styles.emptyText}>등록된 일정이 없어요.</Text>}
         renderItem={({ item }) => (
           <View
-            style={[styles.eventCard, { borderLeftColor: getCategoryColor(item.category) }]}
+            style={[styles.eventCard, { borderLeftColor: getEventColor(item) }]}
           >
             <View style={styles.eventCardBody}>
               <Text style={styles.eventCategory}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>

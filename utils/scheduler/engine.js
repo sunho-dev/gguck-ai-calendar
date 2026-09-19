@@ -1,7 +1,8 @@
 import {commonMeaning} from './common-language.js';
+import {policyReasons,validateRule} from './policy.js';
 export const categories = {exercise:'운동',work:'업무',personal:'개인',study:'공부',health:'건강'};
-export const initialRules = {gap:15, exerciseEnd:22, weekendWork:true, auto:false, reminders:{exercise:30,work:10,personal:60,study:10,health:60}};
-export function restoreRules(saved={}){return {...initialRules,...saved,reminders:{...initialRules.reminders,...saved.reminders}};}
+export const initialRules = {gap:15, exerciseEnd:22, weekendWork:true, auto:true, reminders:{exercise:30,work:10,personal:60,study:10,health:60}};
+export function restoreRules(saved={}){return {...initialRules,...saved,items:(saved.items||[]).flatMap(r=>{try{return [validateRule(r)];}catch{return [];}}),actions:saved.actions||{},reminders:{...initialRules.reminders,...saved.reminders}};}
 export function todayKST(now=new Date()){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);}
 export function addDays(date,n){return new Date(Date.parse(date+'T12:00:00+09:00')+n*86400000).toISOString().slice(0,10);}
 export function stamp(date,time){return Date.parse(`${date}T${time}:00+09:00`);}
@@ -31,20 +32,22 @@ export function parseText(text,now=new Date()){
 export function check(event,events,rules,now=Date.now()){
  const start=stamp(event.date,event.time),end=start+Number(event.duration)*60000;
  const reasons=[];
- if(!Number.isFinite(start)||!Number.isFinite(end)||event.duration<15||event.duration>480)return {ok:false,reasons:[{type:'invalid',message:'날짜와 소요 시간을 확인해 주세요.'}]};
- if(start<=now)reasons.push({type:'past',message:'이미 지난 시간에는 등록할 수 없어요.'});
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(event.date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.time)||!Number.isFinite(start)||!Number.isFinite(end)||todayKST(new Date(start))!==event.date||event.duration<(event.imported?1:15)||event.duration>(event.imported?527040:480))return {ok:false,reasons:[{type:'invalid',message:'날짜와 소요 시간을 확인해 주세요.',overridable:false,action:'block'}]};
+ if(start<=now&&!event.imported)reasons.push({type:'past',message:'이미 지난 시간에는 등록할 수 없어요.'});
  for(const e of events){if(e.cancelledAt||(event.id&&e.id===event.id))continue;const s=stamp(e.date,e.time),t=s+e.duration*60000;const gap=rules.gap*60000;
  if(start<t&&end>s)reasons.push({type:'overlap',message:`‘${e.title}’ (${e.time}–${timeOf(t)})과 겹쳐요.`,event:e});
  else if(start<t+gap&&end>s-gap)reasons.push({type:'gap',message:`‘${e.title}’ 앞뒤로 ${rules.gap}분의 여유가 필요해요.`,event:e});}
  if(event.category==='exercise' && (end>stamp(event.date,clock(rules.exerciseEnd*60))||start<stamp(event.date,'06:00')))reasons.push({type:'category',message:`운동은 오전 6시부터 ${rules.exerciseEnd}시 안에 마치도록 설정했어요.`});
  const day=new Date(event.date+'T12:00:00+09:00').getUTCDay();
  if(event.category==='work'&&rules.weekendWork&&(day===0||day===6))reasons.push({type:'weekend',message:'주말에는 업무 일정을 등록하지 않는 규칙이 있어요.'});
- return {ok:reasons.length===0,reasons};
+ const combined=[...reasons.map(r=>({...r,ruleId:'base:'+r.type,action:['past','invalid'].includes(r.type)?'block':rules.actions?.[r.type]||'suggest',overridable:!['past','invalid'].includes(r.type)})),...policyReasons(event,events,rules.items)];
+ const active=combined.filter(r=>!r.overridable||!(event.ruleExceptions||[]).includes(r.ruleId));
+ return {ok:!active.some(r=>r.action!=='warn'),reasons:active,warnings:active.filter(r=>r.action==='warn')};
 }
 export function alternatives(event,events,rules,now=Date.now()){
  if(!Number.isFinite(stamp(event.date,event.time)))return [];
  const slots=[];const original=stamp(event.date,event.time);
- for(let d=0;d<14;d++)for(let minute=6*60;minute+event.duration<=22*60;minute+=15){const candidate={...event,date:addDays(event.date,d),time:clock(minute),ambiguous:false};if(stamp(candidate.date,candidate.time)===original)continue;if(check(candidate,events,rules,now).ok)slots.push(candidate);}
+ for(let d=0;d<14;d++)for(let minute=6*60;minute+event.duration<=22*60;minute+=15){const candidate={...event,ruleExceptions:[],date:addDays(event.date,d),time:clock(minute),ambiguous:false};if(stamp(candidate.date,candidate.time)===original)continue;if(check(candidate,events,rules,now).reasons.length===0)slots.push(candidate);}
  return slots.sort((a,b)=>Math.abs(stamp(a.date,a.time)-original)-Math.abs(stamp(b.date,b.time)-original)).slice(0,3);
 }
 export function seedEvents(base=todayKST()) {return [

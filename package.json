@@ -21,13 +21,15 @@
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-web": "^0.21.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
     "@vercel/node": "^13.0.1",
     "tsx": "^4.23.13",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "@types/web-push": "^3.6.4"
   },
   "scripts": {
     "start": "expo start",
@@ -37,7 +39,7 @@
     "test:interpret": "tsx scripts/test-interpret.ts",
     "test": "node --test tests/scheduler/*.test.js && node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "build": "expo export -p web"
+    "build": "expo export -p web && node scripts/postexport.mjs"
   },
   "private": true
 }

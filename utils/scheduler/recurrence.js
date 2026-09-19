@@ -27,7 +27,7 @@ export function expandSeries(event){
  if(r.frequency==='monthly'&&(!Number.isInteger(r.monthDay)||r.monthDay<1||r.monthDay>31))throw Error('매월 반복 날짜를 확인해 주세요.');
  const out=[];
  for(let d=event.date;d<=r.until;d=addDays(d,1)){
- const w=weekday(d);if(r.frequency==='daily'||(r.frequency==='weekdays'&&w>=1&&w<=5)||(r.frequency==='weekly'&&r.days.includes(w))||(r.frequency==='monthly'&&+d.slice(-2)===r.monthDay))out.push({...event,date:d});
+ const w=weekday(d);if(r.frequency==='daily'||(r.frequency==='weekdays'&&w>=1&&w<=5)||(r.frequency==='weekly'&&r.days.includes(w))||(r.frequency==='monthly'&&+d.slice(-2)===r.monthDay))out.push({...event,id:event.id?event.id+':'+d:undefined,date:d});
  }
  if(!out.length)throw Error('선택한 기간에 해당하는 반복 날짜가 없어요. 종료일을 늘려 주세요.');
  return out;
