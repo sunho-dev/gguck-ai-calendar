@@ -13,12 +13,12 @@ import {useScheduleStaging} from '../utils/useScheduleStaging';
 import {formatFriendlyDateTime} from '../utils/date';
 import {colors} from '../constants/colors';
 import type {Event} from '../types/schema';
-import {interpretEvent} from '../utils/interpretEvent';
+import {interpretEvent,interpretCommand} from '../utils/interpretEvent';
 import {getPlaceAliases,savePlaceAlias} from '../utils/placeAliasStore';
 import {loadStoredEvents,saveStoredEvents} from '../utils/eventsStorage';
 import {getGoogleSyncStatus,syncEventCreate,syncEventDelete} from '../utils/googleSync';
 import {categoryKey,loadRules,toEvent,toSchedule} from '../utils/scheduleAdapter';
-import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,matchesRule,reminderFor,type Schedule,type Category} from '../utils/scheduler';
+import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,matchCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,matchesRule,reminderFor,type Schedule,type Category} from '../utils/scheduler';
 import {generateEventId} from '../utils/quickEntry';
 import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
 import {DEMO_EXCEL_CSV} from '../utils/demoImportData';
@@ -278,7 +278,21 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   try{const r=interpretChat(text,aliases);event=r.event;unrecognized=r.unknown;setNotice('기본 문장 규칙으로 해석했어요.');}
   catch(localError){
    if(/매주|매일|매월|평일|매달|격주|마다/.test(text))throw localError;
-   const ai=await interpretEvent({text});
+   // 로컬 규칙으로는 등록 문장인지 취소 문장인지조차 판단하지 못했다 — AI에게
+   // 의도부터 물어보고, 그 결과에 맞는 해석(등록 또는 취소)만 이어서 진행한다.
+   const command=await interpretCommand({text});
+   if(command.intent==='cancel'){
+    if(!command.cancellation)throw Error('취소할 내용을 확인하지 못했어요.');
+    const c=command.cancellation;
+    const r=matchCancellation({query:c.title||'',category:c.category?categoryKey(c.category):null,date:c.date,month:c.month,times:c.time?[c.time]:null,scope:c.scope},all().map(toSchedule));
+    setScope(r.scope);
+    if(!r.matches.length)throw Error('일치하는 일정이 없어요.');
+    if(r.matches.length===1&&!r.matches[0].seriesId){await cancel(r.matches[0],'one');return;}
+    if(r.matches.length===1)setTarget(r.matches[0]);else{setSelectedCancelIds(new Set());setCancelChoices(r.matches);}
+    return;
+   }
+   if(!command.event)throw Error('AI가 일정 정보를 해석하지 못했어요.');
+   const ai=command.event;
    if(ai.endDate!==ai.startDate){await persistMultiDayEvent(ai);return;}
    event={title:ai.title,date:ai.startDate,time:ai.time||'',duration:ai.durationMin??60,category:categoryKey(ai.category),location:ai.place?.name,ambiguous:ai.ambiguousFields.includes('time')};
    unrecognized=ai.placeAliasCandidate;needsReview=ai.ambiguousFields.some(f=>f!=='place')||!ai.time;
@@ -356,7 +370,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {button(`${cancellationTargets(all().map(toSchedule),target,scope).length}개 취소 확인`,()=>void guarded(()=>cancel(target,scope)))}
  </>:cancelChoices.length?<>
  <Text style={styles.label}>취소할 일정을 선택하세요 ({selectedCancelIds.size}/{cancelChoices.length}개 선택)</Text>
- {cancelChoices.map(c=>{const checked=!!c.id&&selectedCancelIds.has(c.id);return <Pressable key={c.id} accessibilityRole="checkbox" accessibilityState={{checked}} onPress={()=>{if(!c.id)return;setSelectedCancelIds(prev=>{const next=new Set(prev);next.has(c.id!)?next.delete(c.id!):next.add(c.id!);return next;});}} style={[styles.categoryChoice,checked&&styles.categoryChoiceSelected]}>
+ {cancelChoices.map(c=>{const checked=!!c.id&&selectedCancelIds.has(c.id);return <Pressable key={c.id} accessibilityRole="checkbox" accessibilityState={{checked}} onPress={()=>{if(!c.id)return;setSelectedCancelIds(prev=>{const next=new Set(prev);next.has(c.id!)?next.delete(c.id!):next.add(c.id!);return next;});}} style={[styles.categoryChoice,styles.cancelChoiceRow,checked&&styles.categoryChoiceSelected]}>
   <Text style={styles.categoryChoiceText}>{checked?'✓ ':'☐ '}{c.date} {c.time||'시간 미정'} · {c.title}</Text>
  </Pressable>;})}
  <View style={styles.row}>{button(selectedCancelIds.size===cancelChoices.length?'전체 해제':'전체 선택',()=>setSelectedCancelIds(selectedCancelIds.size===cancelChoices.length?new Set():new Set(cancelChoices.map(c=>c.id).filter((id):id is string=>!!id))),true)}</View>
@@ -366,4 +380,4 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {!!failure&&<Text accessibilityRole="alert" style={styles.notice}>{failure}</Text>}
  </ScrollView></View></Modal></ScrollView></>;
 }
-const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:18},shiftColorPanel:{backgroundColor:'#F6EEE4',borderRadius:12,padding:12,marginTop:10,marginBottom:10,gap:8},shiftColorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},shiftColorLabel:{fontSize:13,fontWeight:'600',color:colors.textDark},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},summaryLine:{flexDirection:'row',alignItems:'center',gap:7},categoryDot:{width:10,height:10,borderRadius:5,flexShrink:0},categoryChoice:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.lightBeige,paddingVertical:10,paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'transparent'},categoryChoiceSelected:{borderColor:colors.terracotta,backgroundColor:'#F7E8DF'},categoryChoiceText:{fontSize:13,color:colors.textDark,fontWeight:'600'},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});
+const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:18},shiftColorPanel:{backgroundColor:'#F6EEE4',borderRadius:12,padding:12,marginTop:10,marginBottom:10,gap:8},shiftColorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},shiftColorLabel:{fontSize:13,fontWeight:'600',color:colors.textDark},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},summaryLine:{flexDirection:'row',alignItems:'center',gap:7},categoryDot:{width:10,height:10,borderRadius:5,flexShrink:0},categoryChoice:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.lightBeige,paddingVertical:10,paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'transparent'},categoryChoiceSelected:{borderColor:colors.terracotta,backgroundColor:'#F7E8DF'},cancelChoiceRow:{marginBottom:8},categoryChoiceText:{fontSize:13,color:colors.textDark,fontWeight:'600'},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});

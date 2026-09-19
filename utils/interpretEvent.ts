@@ -1,8 +1,14 @@
-import type { InterpretedEvent, KnownPlaceAlias } from '../api/interpret'
+import type { InterpretedCancellation, InterpretedEvent, KnownPlaceAlias } from '../api/interpret'
 import { getPlaceAliases } from './placeAliasStore'
 import { retryOnRateLimit, scheduleGeminiCall } from './geminiThrottle'
 
-export type { InterpretedEvent, KnownPlaceAlias }
+export type { InterpretedEvent, InterpretedCancellation, KnownPlaceAlias }
+
+export interface InterpretedCommand {
+  intent: 'register' | 'cancel'
+  event: InterpretedEvent | null
+  cancellation: InterpretedCancellation | null
+}
 
 interface InterpretEventParams {
   text: string
@@ -38,10 +44,12 @@ async function requestInterpret(text: string, createdFrom: InterpretEventParams[
     throw error
   }
 
-  return (body as { event: InterpretedEvent }).event
+  return body as InterpretedCommand
 }
 
-export async function interpretEvent({ text, createdFrom }: InterpretEventParams): Promise<InterpretedEvent> {
+// AI가 문장을 먼저 등록/취소 의도로 분류한 뒤, 그에 맞는 필드를 채워서 돌려준다.
+// 등록이면 event, 취소면 cancellation만 채워지고 나머지는 null이다.
+export async function interpretCommand({ text, createdFrom }: InterpretEventParams): Promise<InterpretedCommand> {
   const storedAliases = await getPlaceAliases()
   const knownAliases: KnownPlaceAlias[] = storedAliases.map((a) => ({
     alias: a.alias,
@@ -64,4 +72,12 @@ export async function interpretEvent({ text, createdFrom }: InterpretEventParams
     }
   }
   throw lastError
+}
+
+// 등록 전용 호출부(퀵 입력 등)를 위한 하위 호환 래퍼. 취소 의도로 분류되면
+// 등록 흐름에서는 처리할 수 없으므로 에러로 던져 로컬 파서 폴백을 타게 한다.
+export async function interpretEvent(params: InterpretEventParams): Promise<InterpretedEvent> {
+  const command = await interpretCommand(params)
+  if (command.intent !== 'register' || !command.event) throw new Error('일정 등록 문장으로 해석하지 못했어요.')
+  return command.event
 }

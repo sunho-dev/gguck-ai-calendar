@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { ApiError } from '@google/genai'
-import { interpretEventText, InterpretRefusedError, type InterpretedEvent, type KnownPlaceAlias } from './_interpretCore'
+import { interpretEventText, InterpretRefusedError, type InterpretedEvent, type InterpretedCancellation, type KnownPlaceAlias } from './_interpretCore'
 import { resolveGeminiKey } from './_geminiKey'
 import { checkGeminiRateLimit, RateLimitedError } from './_rateLimiter'
 
-export type { InterpretedEvent, KnownPlaceAlias }
+export type { InterpretedEvent, InterpretedCancellation, KnownPlaceAlias }
 
 interface InterpretRequestBody {
   text: string
@@ -14,7 +14,9 @@ interface InterpretRequestBody {
 }
 
 interface InterpretResponseBody {
-  event: InterpretedEvent
+  intent: 'register' | 'cancel'
+  event: InterpretedEvent | null
+  cancellation: InterpretedCancellation | null
 }
 
 interface InterpretErrorBody {
@@ -52,8 +54,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     await checkGeminiRateLimit(bucket)
-    const event = await interpretEventText(text, nowIso, apiKey, knownAliases)
-    res.status(200).json({ event } satisfies InterpretResponseBody)
+    const command = await interpretEventText(text, nowIso, apiKey, knownAliases)
+    res.status(200).json({ intent: command.intent, event: command.event, cancellation: command.cancellation } satisfies InterpretResponseBody)
   } catch (err) {
     if (err instanceof RateLimitedError) {
       res.status(429).json({ error: err.message } satisfies InterpretErrorBody)

@@ -26,7 +26,11 @@ export function normalizeChat(text:string,now?:Date):string;
 export function interpretChat(text:string,aliases?:Alias[],now?:Date):{event:Schedule;matched:Alias|null;unknown:string|null};
 export function applyAlias(event:Schedule,alias:Alias):Schedule;
 export function hasCancelIntent(text:string):boolean;
-export function findCancellation(text:string,events:Schedule[],now?:Date):{matches:Schedule[];scope:'one'|'following'|'all'};
+export interface CancelQuery {query?:string;category?:Category|null;date?:string|null;month?:string|null;times?:string[]|null;scope?:'one'|'following'|'all'}
+export interface CancelResult {matches:Schedule[];scope:'one'|'following'|'all';query:string;date:string|null;month:string|null;times:string[]|null;category:Category|null}
+export function parseCancelText(text:string,now?:Date):CancelQuery;
+export function matchCancellation(parsed:CancelQuery,events:Schedule[],now?:Date):CancelResult;
+export function findCancellation(text:string,events:Schedule[],now?:Date):CancelResult;
 export function cancellationTargets(events:Schedule[],target:Schedule,scope:'one'|'following'|'all'):Schedule[];
 export function check(event:Schedule,events:Schedule[],rules:Rules,now?:number):{ok:boolean;reasons:Reason[];warnings?:Reason[]};
 export function alternatives(event:Schedule,events:Schedule[],rules:Rules,now?:number):Schedule[];
