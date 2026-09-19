@@ -44,6 +44,12 @@ export function findCancellation(text,events,now=new Date()){
  times=tm[1]?[clock((h%12+(/오후|저녁|밤/.test(tm[1])?12:0))*60+m)]:h>=1&&h<=12?[clock(h%12*60+m),clock((h%12+12)*60+m)]:[clock(h*60+m)];q=q.replace(tm[0],'');}
  q=q.replace(/일정(?:을|은|만)?/g,'').trim().replace(/(?:을|를)\s*$/,'').replace(/\s+/g,'').toLowerCase();
  if(!q&&!date&&!monthPrefix&&!times&&!category)throw Error('무엇을 취소할까요? “내일 운동 취소”처럼 날짜나 일정 이름을 함께 적어 주세요.');
+ // "카테고리"라는 말 없이 "운동 취소"처럼 흔한 카테고리 단어 하나만 딱 입력한
+ // 경우엔, 시간 없이 등록한 일정이 AI 해석을 거치며 제목이 "운동"이라는 글자
+ // 그대로 남지 않을 수 있어(예: 다르게 요약됨) 제목만으로 못 찾을 수 있다.
+ // 이럴 때는 카테고리가 일치해도 후보로 잡히게 한다(제목 일치와 OR로 결합).
+ const KNOWN_CATEGORY_WORD=/^(운동|헬스|클라이밍|러닝|산책|요가|수영|업무|회의|미팅|출근|공부|학습|수업|스터디|병원|건강|진료|치과|개인|약속)$/;
+ const impliedCategory=!category&&KNOWN_CATEGORY_WORD.test(q)?categoryFromQuery(q):null;
  const matches=events.filter(e=>{
   if(e.cancelledAt)return false;
   if(date){if(e.date!==date)return false;}
@@ -53,7 +59,10 @@ export function findCancellation(text,events,now=new Date()){
   else if(e.time?stamp(e.date,e.time)<+now:e.date<todayKST(now))return false;
   if(times&&!times.includes(e.time))return false;
   if(category&&e.category!==category)return false;
-  if(q&&![e.title,e.aliasTerm||'',e.location||''].some(v=>v.replace(/\s+/g,'').toLowerCase().includes(q)))return false;
+  if(q){
+   const textMatch=[e.title,e.aliasTerm||'',e.location||''].some(v=>v.replace(/\s+/g,'').toLowerCase().includes(q));
+   if(!textMatch&&!(impliedCategory&&e.category===impliedCategory))return false;
+  }
   return true;
  }).sort((a,b)=>stamp(a.date,a.time||'00:00')-stamp(b.date,b.time||'00:00'));
  return {matches,scope,query:q,date,month:monthPrefix,times,category};
