@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import {useRef,useState} from 'react';
 import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,Switch,useWindowDimensions} from 'react-native';
 import {AgendaPreview} from '../components/AgendaPreview';
+import {Toast} from '../components/Toast';
 import DateTimeField from '../components/DateTimeField';
 import {ColorDropdown} from '../components/ColorDropdown';
 import {RuleAwareImportReview} from '../components/RuleAwareImportReview';
@@ -265,7 +266,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  const exceptionReasons=recurrencePlan?recurrencePlan.conflicts.flatMap(c=>c.reasons):(liveVerdict?.reasons||[]).filter(r=>r.action!=='warn');
  const canExcept=exceptionReasons.length>0&&exceptionReasons.every(r=>r.overridable&&r.ruleId);
  async function acceptExceptions(){if(!draft||!canExcept)return;await guarded(()=>proceed({...draft,ruleExceptions:[...new Set([...(draft.ruleExceptions||[]),...exceptionReasons.map(r=>r.ruleId!)])]},true));}
- return <ScrollView style={styles.page} contentContainerStyle={{paddingBottom:40}}><Text style={styles.heading}>일정은 꾹에게 맡겨요.</Text><Text style={styles.label}>한 줄로 남기면, 시간과 규칙을 함께 살펴볼게요.</Text>
+ return <><Toast message={notice} onDismiss={()=>setNotice('')}/><ScrollView style={styles.page} contentContainerStyle={{paddingBottom:40}}><Text style={styles.heading}>일정은 꾹에게 맡겨요.</Text><Text style={styles.label}>한 줄로 남기면, 시간과 규칙을 함께 살펴볼게요.</Text>
  <View style={[styles.columns,wide&&{flexDirection:'row'}]}><View style={{flex:wide?1.35:undefined,minWidth:0}}><View style={styles.panel}><Text style={styles.sectionTitle}>어떤 일정이 있나요?</Text>
  <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder="EX) 내일 오후 8시 집에서 운동, 매주 월수금 오후 8시 운동, 다음주 금요일 8시 종숲 ㄱ, 내일 운동 취소" placeholderTextColor="rgba(136,120,110,0.45)" editable={!busy}/>
  {!hasCancelIntent(text)&&<><Text style={styles.label}>반복 방식</Text><RepeatChoices value={repeatMode} onChange={setRepeatMode} disabled={busy}/><Text style={styles.label}>문장에 적은 반복 조건이 우선해요.</Text></>}
@@ -285,7 +286,6 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  </View>}
  {importDrafts&&<RuleAwareImportReview title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={handleConfirmImport} onCancel={()=>setImportDrafts(null)}/>}
  </View>}
- <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
  <View style={styles.panel}><Text style={styles.sectionTitle}>말 한마디가 일정이 되는 순간.</Text><Text style={styles.label}>등록도 취소도 한 문장으로. 일정은 이 브라우저에 저장돼요.</Text></View></View>
  <View style={{flex:wide?1:undefined,minWidth:0}}><AgendaPreview date={selectedDate} onDate={setSelectedDate} onRules={onRules} onCalendar={onCalendar}/></View></View>
  <Modal visible={!!draft||!!target||cancelChoices.length>0||!!failure} transparent animationType="fade" onRequestClose={close}>
@@ -323,6 +323,6 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  </>:cancelChoices.map(c=><View key={c.id}>{button(`${c.date} ${c.time} · ${c.title}`,()=>{if(c.seriesId){setCancelChoices([]);setTarget(c);}else void guarded(()=>cancel(c,'one'));},true)}</View>)}
  {button('닫기',close,true)}
  {!!failure&&<Text accessibilityRole="alert" style={styles.notice}>{failure}</Text>}
- <Text style={styles.notice}>{notice}</Text></ScrollView></View></Modal></ScrollView>;
+ </ScrollView></View></Modal></ScrollView></>;
 }
 const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:18},shiftColorPanel:{backgroundColor:'#F6EEE4',borderRadius:12,padding:12,marginTop:10,marginBottom:10,gap:8},shiftColorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},shiftColorLabel:{fontSize:13,fontWeight:'600',color:colors.textDark},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},summaryLine:{flexDirection:'row',alignItems:'center',gap:7},categoryDot:{width:10,height:10,borderRadius:5,flexShrink:0},categoryChoice:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.lightBeige,paddingVertical:10,paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'transparent'},categoryChoiceSelected:{borderColor:colors.terracotta,backgroundColor:'#F7E8DF'},categoryChoiceText:{fontSize:13,color:colors.textDark,fontWeight:'600'},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});
