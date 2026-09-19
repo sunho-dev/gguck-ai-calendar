@@ -1,4 +1,5 @@
 import type { ImportedEventDraft } from './icsImport'
+import { retryOnRateLimit, scheduleGeminiCall } from './geminiThrottle'
 
 const MAX_RETRIES = 2 // Gemini 무료 티어 과부하(503) 대비, utils/interpretEvent.ts와 동일한 정책
 const RETRY_DELAY_MS = 1500
@@ -60,7 +61,8 @@ async function withRetry(body: Record<string, unknown>): Promise<ImportedEventDr
   let lastError: unknown
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await requestBulkInterpret(body)
+      // 같은 탭에서 짧은 시간에 여러 번 요청해도 분당 한도(RPM)에 안 걸리도록 간격을 두고 보낸다.
+      return await retryOnRateLimit(() => scheduleGeminiCall(() => requestBulkInterpret(body)))
     } catch (err) {
       lastError = err
       const status = (err as Error & { status?: number }).status

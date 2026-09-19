@@ -1,5 +1,6 @@
 import type { InterpretedEvent, KnownPlaceAlias } from '../api/interpret'
 import { getPlaceAliases } from './placeAliasStore'
+import { retryOnRateLimit, scheduleGeminiCall } from './geminiThrottle'
 
 export type { InterpretedEvent, KnownPlaceAlias }
 
@@ -50,7 +51,7 @@ export async function interpretEvent({ text, createdFrom }: InterpretEventParams
   let lastError: unknown
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await requestInterpret(text, createdFrom, knownAliases)
+      return await retryOnRateLimit(() => scheduleGeminiCall(() => requestInterpret(text, createdFrom, knownAliases)))
     } catch (err) {
       lastError = err
       const status = (err as Error & { status?: number }).status
