@@ -17,12 +17,12 @@ export function AgendaPreview({date,onDate,onRules,onCalendar}:{date:string;onDa
     <DateTimeField label="캘린더 날짜 이동" kind="date" value={date} onChange={d=>{if(d)onDate(d);}}/>
     <View style={styles.row}>{Array.from({length:7},(_,i)=>addDays(date,i-3)).map(d=><Choice key={d} label={`${Number(d.slice(-2))}${events.some(e=>e.startDate<=d&&e.endDate>=d)?' ·':''}`} selected={d===date} onPress={()=>onDate(d)}/>)}</View>
     {daily.map(e=>{const userCategory=getCategory(e.category,userCategories);return <View key={e.id} style={[styles.event,{borderLeftColor:userCategory?.color||({exercise:'#81A894',work:'#8E9DBA',study:'#D3AF77',health:'#AF90BB',personal:'#D98773'})[categoryKey(e.category)]}]}>
-      <View style={styles.categoryLine}><View style={[styles.categoryDot,{backgroundColor:userCategory?.color||'#B9ADA2'}]}/><Text style={styles.label}>{userCategory?userCategory.label:categories[categoryKey(e.category)]} · {e.time}–{new Date(stamp(e.startDate,e.time)+e.durationMin*60000).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})}</Text></View>
+      <View style={styles.categoryLine}><View style={[styles.categoryDot,{backgroundColor:userCategory?.color||'#B9ADA2'}]}/><Text style={styles.label}>{userCategory?userCategory.label:categories[categoryKey(e.category)]} · {e.time?`${e.time}–${new Date(stamp(e.startDate,e.time)+e.durationMin*60000).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})}`:'시간 미정'}</Text></View>
       <Text style={styles.title}>{e.title}</Text>
       {e.place&&<Text style={styles.label}>장소: {e.place.name}</Text>}
       {e.aliasTerm&&<Text style={styles.label}>개인 사전 · {e.aliasTerm} → {e.aliasMeaning||e.place?.name}</Text>}
       {e.recurrence&&<Text style={styles.label}>↻ {repeatLabels[e.recurrence.frequency]} 반복</Text>}
-      <Text style={styles.label}>알림 {e.remindMin}분 전</Text>
+      {e.time?<Text style={styles.label}>알림 {e.remindMin}분 전</Text>:<Text style={styles.label}>시간 미정이라 알림 없음</Text>}
       {!!e.ruleExceptions?.length&&<Text style={styles.label}>이번 일정만 규칙 예외 적용</Text>}
       {!!e.reminderMessage&&<Text style={styles.label}>{e.reminderMessage}</Text>}
     </View>})}

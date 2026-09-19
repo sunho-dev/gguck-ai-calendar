@@ -651,7 +651,7 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
               <View style={styles.eventCategoryRow}><View style={[styles.eventCategoryDot,{backgroundColor:getCategory(item.category,userCategories)?.color||'#B9ADA2'}]}/><Text style={styles.eventCategory}>{getCategory(item.category,userCategories)?.label ?? CATEGORY_LABEL[item.category] ?? item.category}</Text></View>
               <Text style={styles.eventTitle}>{item.title}</Text>
               <Text style={styles.eventTime}>
-                {item.time} · {item.durationMin}분
+                {item.time || '시간 미정'} · {item.durationMin}분
               </Text>
             </View>
             <View style={styles.eventCardActions}>

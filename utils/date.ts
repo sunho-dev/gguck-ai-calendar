@@ -76,9 +76,11 @@ export function addMinutesToTime(date: ISODate, time: ISOTime, minutes: number):
 }
 
 // 등록 확인 알림 등 사용자에게 보여줄 자연스러운 한국어 날짜/시간 표현.
-// 예: "9월 22일 오후 7시", "9월 22일 오후 7시 30분"
+// 예: "9월 22일 오후 7시", "9월 22일 오후 7시 30분". time이 비어있으면("시간 미정")
+// 날짜만 반환한다 — 예: "9월 22일".
 export function formatFriendlyDateTime(date: ISODate, time: ISOTime): string {
   const [, month, day] = date.split('-').map(Number)
+  if (!time) return `${month}월 ${day}일`
   const [hour, minute] = time.split(':').map(Number)
   const period = hour < 12 ? '오전' : '오후'
   const hour12 = hour % 12 === 0 ? 12 : hour % 12

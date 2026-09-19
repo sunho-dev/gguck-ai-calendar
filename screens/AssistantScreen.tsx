@@ -207,7 +207,10 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  }
  async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
   setChoices([]);setIssues([]);
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(s.date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time)||!s.title.trim()||!Number.isFinite(s.duration)||s.duration<15||s.duration>480||!Number.isFinite(stamp(s.date,s.time))||todayKST(new Date(stamp(s.date,s.time)))!==s.date){setDraft(s);setIssues(['날짜·시간·제목과 소요 시간(15~480분)을 확인해 주세요.']);return;}
+  // 시간은 비워둘 수 있다("시간 미정"). 소요 시간은 비워두면(또는 0 이하면) 기본 60분으로.
+  if(!Number.isFinite(s.duration)||s.duration<=0)s={...s,duration:60};
+  const hasTime=!!s.time;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s.date)||(hasTime&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time))||!s.title.trim()||s.duration<15||s.duration>480||(hasTime&&(!Number.isFinite(stamp(s.date,s.time))||todayKST(new Date(stamp(s.date,s.time)))!==s.date))){setDraft(s);setIssues(['날짜·제목과 소요 시간(15~480분)을 확인해 주세요.']);return;}
   if(s.ambiguous){setDraft(s);return;}
   const events=all().map(toSchedule),rules=loadRules();
   if(s.recurrence){
@@ -292,7 +295,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder="EX) 내일 오후 8시 집에서 운동, 매주 월수금 오후 8시 운동, 다음주 금요일 8시 종숲 ㄱ, 내일 운동 취소" placeholderTextColor="rgba(136,120,110,0.45)" editable={!busy}/>
  {!hasCancelIntent(text)&&<><Text style={styles.label}>반복 방식</Text><RepeatChoices value={repeatMode} onChange={setRepeatMode} disabled={busy}/><Text style={styles.label}>문장에 적은 반복 조건이 우선해요.</Text></>}
  {button(busy?'처리 중…':hasCancelIntent(text)?'요청 보내기':'일정 등록',()=>void submit())}
- <Text style={styles.label}>확인이 필요할 때만 물어봐요. 소요 시간 생략 시 60분.</Text></View>
+ <Text style={styles.label}>확인이 필요할 때만 물어봐요. 시간 생략 시 시간 미정, 소요 시간 생략 시 60분으로 등록돼요.</Text></View>
  {Platform.OS==='web'&&<View style={[styles.panel,styles.importPanel]}><Text style={styles.sectionTitle}>여러 일정 한 번에 가져오기</Text><Text style={styles.label}>.ics 파일, 근무표 엑셀, 근무표 사진에서 일정을 한 번에 뽑아 등록해요.</Text>
  {field('표/사진 속 내 이름',myName,handleMyNameChange)}
  {!importDrafts&&<View style={styles.row}>{button('가져오기',()=>void handleImport(),true,isImporting)}</View>}
@@ -320,8 +323,8 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  {button('원문 그대로 계속',()=>{setUnknown(null);void guarded(()=>proceed(draft));},true)}
  </>:draft?<>
  <Text style={styles.sectionTitle}>{draft.ambiguous?'오전일까요, 오후일까요?':draft.recurrence?'언제까지 함께할까요?':liveVerdict&&!liveVerdict.ok?'이 시간은 조정이 필요해요.':'일정 확인'}</Text>
- <View style={styles.summaryLine}><View style={[styles.categoryDot,{backgroundColor:(categoryOverride&&getCategory(categoryOverride,userCategories)?.color)||'#B9ADA2'}]}/><Text style={styles.label}>{draft.title} · {draft.duration}분 · {(categoryOverride&&getCategory(categoryOverride,userCategories)?.label)||categories[draft.category]} · 알림 {(categoryOverride&&getCategory(categoryOverride,userCategories)?.defaultReminderMin)??reminderFor(draft,loadRules()).minutes}분 전</Text></View>
- {field('제목',draft.title,title=>patch({title}))}<Text style={styles.label}>{draft.recurrence?'반복 시작일':'날짜'}</Text><DateTimeField label="일정 날짜" kind="date" value={draft.date} onChange={date=>patch({date})} disabled={busy}/><Text style={styles.label}>시간 (24시간제)</Text><DateTimeField label="일정 시간" kind="time" value={draft.time} onChange={time=>patch({time,ambiguous:false})} disabled={busy}/>
+ <View style={styles.summaryLine}><View style={[styles.categoryDot,{backgroundColor:(categoryOverride&&getCategory(categoryOverride,userCategories)?.color)||'#B9ADA2'}]}/><Text style={styles.label}>{draft.title} · {draft.time||'시간 미정'} · {draft.duration}분 · {(categoryOverride&&getCategory(categoryOverride,userCategories)?.label)||categories[draft.category]} · 알림 {draft.time?`${(categoryOverride&&getCategory(categoryOverride,userCategories)?.defaultReminderMin)??reminderFor(draft,loadRules()).minutes}분 전`:'시간 미정이라 알림 없음'}</Text></View>
+ {field('제목',draft.title,title=>patch({title}))}<Text style={styles.label}>{draft.recurrence?'반복 시작일':'날짜'}</Text><DateTimeField label="일정 날짜" kind="date" value={draft.date} onChange={date=>patch({date})} disabled={busy}/><Text style={styles.label}>시간 (24시간제, 비워두면 시간 미정으로 등록돼요)</Text><DateTimeField label="일정 시간" kind="time" value={draft.time} onChange={time=>patch({time,ambiguous:false})} disabled={busy}/>
  {draft.ambiguous&&<View style={styles.row}>{[0,12].map(n=><View key={n}>{button((n?'오후':'오전')+(draft.recurrence?' 선택':'로 등록'),()=>{const resolved={...draft,time:String(Number(draft.time.slice(0,2))%12+n).padStart(2,'0')+draft.time.slice(2),ambiguous:false};if(draft.recurrence)patch(resolved);else void guarded(()=>proceed(resolved));},true)}</View>)}</View>}
  {field('소요 시간 (분)',String(draft.duration),v=>patch({duration:Number(v)}))}
  <Text>장소: {draft.location||'없음'} · 기본 소요 시간 60분</Text>

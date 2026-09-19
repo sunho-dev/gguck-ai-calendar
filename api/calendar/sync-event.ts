@@ -1,8 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { ensureFreshAccessToken, getGoogleAccount, saveGoogleAccount } from '../_googleAuth'
-import { addMinutesToTime } from '../../utils/date'
+import { addDays, addMinutesToTime } from '../../utils/date'
 
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3'
+
+// 구글 캘린더 종일(all-day) 이벤트의 end.date는 배타적(exclusive)이라
+// 하루짜리 일정이어도 종료일 다음 날 날짜를 넣어야 정확히 하루로 표시된다.
+function addDaysExclusive(endDate: string): string {
+  return addDays(endDate, 1)
+}
 
 interface SyncEventPayload {
   title: string
@@ -74,17 +80,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
 
-    const { date: endDate, time: endTime } = addMinutesToTime(
-      body.event.startDate,
-      body.event.time,
-      body.event.durationMin
-    )
+    // 시간이 없는("시간 미정") 일정은 구글 캘린더의 종일(all-day) 이벤트로 보낸다.
+    // 종일 이벤트는 dateTime이 아니라 date(날짜만)로 시작/종료를 지정해야 하고,
+    // 종료일은 배타적(exclusive)이라 하루짜리여도 다음 날 날짜를 넣어야 한다.
+    const hasTime = Boolean(body.event.time)
+    const timeSection = hasTime
+      ? (() => {
+          const { date: endDate, time: endTime } = addMinutesToTime(
+            body.event!.startDate,
+            body.event!.time,
+            body.event!.durationMin
+          )
+          return {
+            start: { dateTime: toRfc3339(body.event!.startDate, body.event!.time), timeZone: 'Asia/Seoul' },
+            end: { dateTime: toRfc3339(endDate, endTime), timeZone: 'Asia/Seoul' },
+          }
+        })()
+      : {
+          start: { date: body.event.startDate },
+          end: { date: addDaysExclusive(body.event.endDate) },
+        }
 
     const payload = {
       summary: body.event.title,
-      reminders: {useDefault:false,overrides:[{method:'popup',minutes:Math.max(0,Math.min(10080,Math.round(body.event.remindMin ?? 10)))}]},
-      start: { dateTime: toRfc3339(body.event.startDate, body.event.time), timeZone: 'Asia/Seoul' },
-      end: { dateTime: toRfc3339(endDate, endTime), timeZone: 'Asia/Seoul' },
+      reminders: hasTime
+        ? { useDefault: false, overrides: [{ method: 'popup', minutes: Math.max(0, Math.min(10080, Math.round(body.event.remindMin ?? 10))) }] }
+        : { useDefault: false, overrides: [] },
+      ...timeSection,
       location: body.event.place
         ? [body.event.place.name, body.event.place.address].filter(Boolean).join(' ')
         : undefined,
