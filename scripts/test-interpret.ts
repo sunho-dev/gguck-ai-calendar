@@ -26,10 +26,10 @@ async function main() {
   console.log(JSON.stringify(SAMPLE_KNOWN_ALIASES, null, 2))
   console.log('--- 호출 중... ---')
 
-  const event = await interpretEventText(text, nowIso, apiKey, SAMPLE_KNOWN_ALIASES)
+  const command = await interpretEventText(text, nowIso, apiKey, SAMPLE_KNOWN_ALIASES)
 
   console.log('--- 결과 ---')
-  console.log(JSON.stringify(event, null, 2))
+  console.log(JSON.stringify(command, null, 2))
 }
 
 main().catch((err) => {

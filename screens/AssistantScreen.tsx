@@ -13,12 +13,12 @@ import {useScheduleStaging} from '../utils/useScheduleStaging';
 import {formatFriendlyDateTime} from '../utils/date';
 import {colors} from '../constants/colors';
 import type {Event} from '../types/schema';
-import {interpretEvent} from '../utils/interpretEvent';
+import {interpretEvent,interpretCommand} from '../utils/interpretEvent';
 import {getPlaceAliases,savePlaceAlias} from '../utils/placeAliasStore';
 import {loadStoredEvents,saveStoredEvents} from '../utils/eventsStorage';
 import {getGoogleSyncStatus,syncEventCreate,syncEventDelete} from '../utils/googleSync';
 import {categoryKey,loadRules,toEvent,toSchedule} from '../utils/scheduleAdapter';
-import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,matchesRule,reminderFor,type Schedule,type Category} from '../utils/scheduler';
+import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,matchCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,matchesRule,reminderFor,type Schedule,type Category} from '../utils/scheduler';
 import {generateEventId} from '../utils/quickEntry';
 import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
 import {DEMO_EXCEL_CSV} from '../utils/demoImportData';
@@ -278,7 +278,21 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   try{const r=interpretChat(text,aliases);event=r.event;unrecognized=r.unknown;setNotice('기본 문장 규칙으로 해석했어요.');}
   catch(localError){
    if(/매주|매일|매월|평일|매달|격주|마다/.test(text))throw localError;
-   const ai=await interpretEvent({text});
+   // 로컬 규칙으로는 등록 문장인지 취소 문장인지조차 판단하지 못했다 — AI에게
+   // 의도부터 물어보고, 그 결과에 맞는 해석(등록 또는 취소)만 이어서 진행한다.
+   const command=await interpretCommand({text});
+   if(command.intent==='cancel'){
+    if(!command.cancellation)throw Error('취소할 내용을 확인하지 못했어요.');
+    const c=command.cancellation;
+    const r=matchCancellation({query:c.title||'',category:c.category?categoryKey(c.category):null,date:c.date,month:c.month,times:c.time?[c.time]:null,scope:c.scope},all().map(toSchedule));
+    setScope(r.scope);
+    if(!r.matches.length)throw Error('일치하는 일정이 없어요.');
+    if(r.matches.length===1&&!r.matches[0].seriesId){await cancel(r.matches[0],'one');return;}
+    if(r.matches.length===1)setTarget(r.matches[0]);else{setSelectedCancelIds(new Set());setCancelChoices(r.matches);}
+    return;
+   }
+   if(!command.event)throw Error('AI가 일정 정보를 해석하지 못했어요.');
+   const ai=command.event;
    if(ai.endDate!==ai.startDate){await persistMultiDayEvent(ai);return;}
    event={title:ai.title,date:ai.startDate,time:ai.time||'',duration:ai.durationMin??60,category:categoryKey(ai.category),location:ai.place?.name,ambiguous:ai.ambiguousFields.includes('time')};
    unrecognized=ai.placeAliasCandidate;needsReview=ai.ambiguousFields.some(f=>f!=='place')||!ai.time;

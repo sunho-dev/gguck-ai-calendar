@@ -11,17 +11,44 @@ function categoryFromQuery(text){
  if(/개인|약속/.test(text))return 'personal';
  return null;
 }
-export function findCancellation(text,events,now=new Date()){
+const KNOWN_CATEGORY_WORD=/^(운동|헬스|클라이밍|러닝|산책|요가|수영|업무|회의|미팅|출근|공부|학습|수업|스터디|병원|건강|진료|치과|개인|약속)$/;
+// 텍스트 파싱과 실제 일정 매칭을 분리해서, 로컬 규칙 파서뿐 아니라 AI가 뽑아준
+// 구조화된 취소 정보(제목/카테고리/날짜/달/시간/범위)로도 같은 매칭 로직을 재사용한다.
+export function matchCancellation({query='',category=null,date=null,month=null,times=null,scope='one'}={},events,now=new Date()){
+ const q=(query||'').trim().replace(/\s+/g,'').toLowerCase();
+ // "카테고리"라는 말 없이 "운동 취소"처럼 흔한 카테고리 단어 하나만 딱 입력한
+ // 경우엔, 시간 없이 등록한 일정이 AI 해석을 거치며 제목이 "운동"이라는 글자
+ // 그대로 남지 않을 수 있어(예: 다르게 요약됨) 제목만으로 못 찾을 수 있다.
+ // 이럴 때는 카테고리가 일치해도 후보로 잡히게 한다(제목 일치와 OR로 결합).
+ const impliedCategory=!category&&KNOWN_CATEGORY_WORD.test(q)?categoryFromQuery(q):null;
+ const matches=events.filter(e=>{
+  if(e.cancelledAt)return false;
+  if(date){if(e.date!==date)return false;}
+  else if(month){if(!e.date.startsWith(month))return false;}
+  // 명시적으로 날짜/달을 지정하지 않았을 때는 이미 지난 일정은 제외한다.
+  // 시간 미정 일정은 비교할 시각이 없으므로 날짜만으로 지난 일정인지 판단한다.
+  else if(e.time?stamp(e.date,e.time)<+now:e.date<todayKST(now))return false;
+  if(times&&!times.includes(e.time))return false;
+  if(category&&e.category!==category)return false;
+  if(q){
+   const textMatch=[e.title,e.aliasTerm||'',e.location||''].some(v=>v.replace(/\s+/g,'').toLowerCase().includes(q));
+   if(!textMatch&&!(impliedCategory&&e.category===impliedCategory))return false;
+  }
+  return true;
+ }).sort((a,b)=>stamp(a.date,a.time||'00:00')-stamp(b.date,b.time||'00:00'));
+ return {matches,scope,query:q,date,month,times,category};
+}
+// "9월 운동 카테고리 취소해줘"처럼 "카테고리"라는 말이 명시적으로 있을 때만
+// 카테고리 단위 일괄 취소로 해석한다. 그냥 "운동 취소"는 제목이 "운동"인
+// 특정 일정을 가리키는 경우가 훨씬 많아서, 명시적 신호 없이 카테고리 전체를
+// 지우면 사용자가 의도하지 않은 대량 취소가 일어날 수 있기 때문.
+export function parseCancelText(text,now=new Date()){
  const suffix=new RegExp(CANCEL_WORD+'(?:\\s*(?:해\\s*줘|해\\s*주세요|해|할래|해주세요|해줘))?[.!。]?\\s*$');
  const negated=new RegExp(CANCEL_WORD+'\\s*(?:하지|안|말|하지마)|'+CANCEL_WORD+'.*(?:말아|아니)');
  if(!suffix.test(text)||negated.test(text))throw Error('취소 요청을 확인하지 못했어요. “내일 운동 취소”처럼 입력해 주세요. 아무 일정도 바꾸지 않았어요.');
  let q=text.trim().replace(suffix,'').trim();
  const scope=/전체|전부|모두/.test(q)?'all':/이후|앞으로/.test(q)?'following':'one';
  q=q.replace(/전체|전부|모두|이후|앞으로|반복|이번만|이번/g,'');
- // "9월 운동 카테고리 취소해줘"처럼 "카테고리"라는 말이 명시적으로 있을 때만
- // 카테고리 단위 일괄 취소로 해석한다. 그냥 "운동 취소"는 제목이 "운동"인
- // 특정 일정을 가리키는 경우가 훨씬 많아서, 명시적 신호 없이 카테고리 전체를
- // 지우면 사용자가 의도하지 않은 대량 취소가 일어날 수 있기 때문.
  let category=null;
  if(/카테고리/.test(q)){
   category=categoryFromQuery(q);
@@ -49,26 +76,8 @@ export function findCancellation(text,events,now=new Date()){
  times=tm[1]?[clock((h%12+(/오후|저녁|밤/.test(tm[1])?12:0))*60+m)]:h>=1&&h<=12?[clock(h%12*60+m),clock((h%12+12)*60+m)]:[clock(h*60+m)];q=q.replace(tm[0],'');}
  q=q.replace(/일정(?:을|은|만)?/g,'').trim().replace(/(?:을|를)\s*$/,'').replace(/\s+/g,'').toLowerCase();
  if(!q&&!date&&!monthPrefix&&!times&&!category)throw Error('무엇을 취소할까요? “내일 운동 취소”처럼 날짜나 일정 이름을 함께 적어 주세요.');
- // "카테고리"라는 말 없이 "운동 취소"처럼 흔한 카테고리 단어 하나만 딱 입력한
- // 경우엔, 시간 없이 등록한 일정이 AI 해석을 거치며 제목이 "운동"이라는 글자
- // 그대로 남지 않을 수 있어(예: 다르게 요약됨) 제목만으로 못 찾을 수 있다.
- // 이럴 때는 카테고리가 일치해도 후보로 잡히게 한다(제목 일치와 OR로 결합).
- const KNOWN_CATEGORY_WORD=/^(운동|헬스|클라이밍|러닝|산책|요가|수영|업무|회의|미팅|출근|공부|학습|수업|스터디|병원|건강|진료|치과|개인|약속)$/;
- const impliedCategory=!category&&KNOWN_CATEGORY_WORD.test(q)?categoryFromQuery(q):null;
- const matches=events.filter(e=>{
-  if(e.cancelledAt)return false;
-  if(date){if(e.date!==date)return false;}
-  else if(monthPrefix){if(!e.date.startsWith(monthPrefix))return false;}
-  // 명시적으로 날짜/달을 지정하지 않았을 때는 이미 지난 일정은 제외한다.
-  // 시간 미정 일정은 비교할 시각이 없으므로 날짜만으로 지난 일정인지 판단한다.
-  else if(e.time?stamp(e.date,e.time)<+now:e.date<todayKST(now))return false;
-  if(times&&!times.includes(e.time))return false;
-  if(category&&e.category!==category)return false;
-  if(q){
-   const textMatch=[e.title,e.aliasTerm||'',e.location||''].some(v=>v.replace(/\s+/g,'').toLowerCase().includes(q));
-   if(!textMatch&&!(impliedCategory&&e.category===impliedCategory))return false;
-  }
-  return true;
- }).sort((a,b)=>stamp(a.date,a.time||'00:00')-stamp(b.date,b.time||'00:00'));
- return {matches,scope,query:q,date,month:monthPrefix,times,category};
+ return {query:q,category,date,month:monthPrefix,times,scope};
+}
+export function findCancellation(text,events,now=new Date()){
+ return matchCancellation(parseCancelText(text,now),events,now);
 }
