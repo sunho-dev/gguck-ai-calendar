@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../constants/colors';
@@ -13,11 +13,40 @@ const WEEKDAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
 // 기기에 설치된 카카오톡/인스타그램/메시지 등이 실제 OS 공유 시트에 그대로 뜬다 — 사용자가
 // 요청한 "각 앱으로 연결"에 가장 가까운, 실제로 동작하는 방법이다. 파일 공유를 지원하지
 // 않는 환경(대부분의 데스크탑 브라우저)에서는 이미지를 대신 다운로드하고 안내만 띄운다.
-type ShareTarget = { key: string; label: string; color: string };
+// 실제 카카오/인스타그램 로고는 각 회사 상표라서 라이선스 없이 그대로 쓰지 않고,
+// 말풍선/카메라 모양 등 간단한 도형으로 해당 서비스를 연상시키는 아이콘만 직접 그린다.
+function KakaoGlyph() {
+  return (
+    <View style={styles.iconWrap}>
+      <View style={styles.kakaoBubble} />
+      <View style={styles.kakaoTail} />
+    </View>
+  );
+}
+function InstagramGlyph() {
+  return (
+    <View style={styles.iconWrap}>
+      <View style={styles.igFrame}>
+        <View style={styles.igLens} />
+      </View>
+      <View style={styles.igDot} />
+    </View>
+  );
+}
+function MessageGlyph() {
+  return (
+    <View style={styles.iconWrap}>
+      <View style={styles.msgBubble} />
+      <View style={styles.msgTail} />
+    </View>
+  );
+}
+
+type ShareTarget = { key: string; label: string; color: string; Glyph: () => ReactElement };
 const SHARE_TARGETS: ShareTarget[] = [
-  { key: 'kakao', label: '카카오톡', color: '#FEE500' },
-  { key: 'instagram', label: '인스타그램', color: '#D6336C' },
-  { key: 'message', label: '메시지', color: '#5FC76A' },
+  { key: 'kakao', label: '카카오톡', color: '#FEE500', Glyph: KakaoGlyph },
+  { key: 'instagram', label: '인스타그램', color: '#D6336C', Glyph: InstagramGlyph },
+  { key: 'message', label: '메시지', color: '#5FC76A', Glyph: MessageGlyph },
 ];
 
 export function ShareCalendarModal({
@@ -172,7 +201,9 @@ export function ShareCalendarModal({
                 disabled={busy !== null}
                 onPress={() => void handleAppShare(target)}
               >
-                <View style={[styles.shareIcon, { backgroundColor: target.color }]} />
+                <View style={[styles.shareIcon, styles.shareIconCenter, { backgroundColor: target.color }]}>
+                  <target.Glyph />
+                </View>
                 <Text style={styles.shareLabel}>{busy === target.key ? '준비 중…' : target.label}</Text>
               </Pressable>
             ))}
@@ -327,6 +358,79 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
+  },
+  shareIconCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconWrap: {
+    width: 24,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kakaoBubble: {
+    width: 22,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#3C1E1E',
+  },
+  kakaoTail: {
+    position: 'absolute',
+    bottom: -3,
+    left: 6,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 4,
+    borderRightWidth: 4,
+    borderTopWidth: 5,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#3C1E1E',
+  },
+  igFrame: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  igLens: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  igDot: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#fff',
+  },
+  msgBubble: {
+    width: 22,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  msgTail: {
+    position: 'absolute',
+    bottom: -3,
+    left: 6,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 4,
+    borderRightWidth: 4,
+    borderTopWidth: 5,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#fff',
   },
   downloadIcon: {
     backgroundColor: colors.lightBeige,
