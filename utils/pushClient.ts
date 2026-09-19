@@ -15,7 +15,11 @@ export async function pushRequest(action:string,body:unknown={}){
  finally{clearTimeout(timer);}
 }
 export async function syncPush(){return serial(async()=>{if(pushEnabled())return pushRequest('sync',{jobs:buildReminderPlan(loadStoredEvents()||[])});});}
-export async function enablePush(){
+export async function testPush(){
+ if(!pushEnabled())throw Error('전체 알림을 먼저 켜 주세요.');
+ return serial(()=>pushRequest('test'));
+}
+export async function enablePush(sendTest=true){
  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))throw Error('이 브라우저는 웹 푸시를 지원하지 않아요. 지원 브라우저 또는 설치된 웹앱에서 열어 주세요.');
  if(await Notification.requestPermission()!=='granted')throw Error('브라우저 설정에서 알림을 허용해 주세요.');
  const response=await fetch('/api/push?action=config',{signal:AbortSignal.timeout(15000)});
@@ -26,6 +30,6 @@ export async function enablePush(){
  const subscription=await registration.pushManager.getSubscription()||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
  if(pushEnabled()){try{await serial(()=>pushRequest('subscription',{subscription:subscription.toJSON()}));}catch(e){if((e as {status?:number}).status===401)localStorage.removeItem(KEY);else throw e;}}
  if(!pushEnabled()){const result=await pushRequest('register',{subscription:subscription.toJSON()});localStorage.setItem(KEY,result.token);}
- await syncPush();await serial(()=>pushRequest('test'));
+ await syncPush();if(sendTest)await testPush();
 }
 export async function disablePush(){return serial(async()=>{try{await pushRequest('disable');}catch(e){if((e as {status?:number}).status!==401)throw e;}localStorage.removeItem(KEY);const registration=await navigator.serviceWorker.getRegistration();await (await registration?.pushManager.getSubscription())?.unsubscribe();});}
