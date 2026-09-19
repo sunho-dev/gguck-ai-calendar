@@ -41,45 +41,6 @@ function getImageSize(uri:string):Promise<{width:number;height:number}>{
  });
 }
 
-const AMPM_LIST_WIDTH=110;
-// 오전/오후를 각각 버튼으로 늘어놓으니 웹(마우스)에서는 굳이 두 개를 다 보여줄 필요 없이
-// 드롭다운 하나로 고르는 게 더 자연스럽다. ColorDropdown과 같은 Modal 기반 방식을 써서
-// 카드 영역 밖으로도 잘리지 않고 항상 맨 위에 뜨게 한다.
-function AmPmDropdown({onSelect}:{onSelect:(period:'am'|'pm')=>void}){
- const [open,setOpen]=useState(false);
- const [anchor,setAnchor]=useState<{x:number;y:number;width:number;height:number}|null>(null);
- const triggerRef=useRef<View>(null);
- const openDropdown=()=>{triggerRef.current?.measureInWindow((x,y,width,height)=>{setAnchor({x,y,width,height});setOpen(true);});};
- return (
-  <View>
-   <Pressable ref={triggerRef} style={ampmStyles.trigger} onPress={openDropdown}>
-    <Text style={ampmStyles.triggerText}>오전/오후 선택</Text>
-    <Text style={ampmStyles.caret}>▾</Text>
-   </Pressable>
-   <Modal visible={open} transparent animationType="fade" onRequestClose={()=>setOpen(false)}>
-    <Pressable style={StyleSheet.absoluteFill} onPress={()=>setOpen(false)}>
-     {anchor&&(
-      <View style={[ampmStyles.optionList,{top:anchor.y+anchor.height+4,left:anchor.x}]}>
-       {(['오전','오후'] as const).map((label,i)=>(
-        <Pressable key={label} style={ampmStyles.option} onPress={()=>{setOpen(false);onSelect(i===0?'am':'pm');}}>
-         <Text style={ampmStyles.optionText}>{label}</Text>
-        </Pressable>
-       ))}
-      </View>
-     )}
-    </Pressable>
-   </Modal>
-  </View>
- );
-}
-const ampmStyles=StyleSheet.create({
- trigger:{flexDirection:'row',alignItems:'center',gap:6,paddingVertical:10,paddingHorizontal:14,borderRadius:10,backgroundColor:colors.white,borderWidth:1,borderColor:colors.lightBeige,alignSelf:'flex-start'},
- triggerText:{fontSize:13,color:colors.textDark,fontWeight:'600'},
- caret:{fontSize:10,color:colors.warmGray},
- optionList:{position:'absolute',width:AMPM_LIST_WIDTH,backgroundColor:colors.white,borderRadius:8,borderWidth:1,borderColor:colors.lightBeige,overflow:'hidden',shadowColor:'#000',shadowOffset:{width:0,height:4},shadowOpacity:.15,shadowRadius:8,elevation:6},
- option:{paddingVertical:10,paddingHorizontal:14,backgroundColor:colors.white},
- optionText:{fontSize:13,color:colors.textDark,fontWeight:'600'},
-});
 
 type Scope='one'|'following'|'all';
 export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;onRules?:()=>void;onCalendar?:()=>void}){
@@ -361,12 +322,8 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  </>:draft?<>
  <Text style={styles.sectionTitle}>{draft.ambiguous?'오전일까요, 오후일까요?':draft.recurrence?'언제까지 함께할까요?':liveVerdict&&!liveVerdict.ok?'이 시간은 조정이 필요해요.':'일정 확인'}</Text>
  <View style={styles.summaryLine}><View style={[styles.categoryDot,{backgroundColor:(categoryOverride&&getCategory(categoryOverride,userCategories)?.color)||'#B9ADA2'}]}/><Text style={styles.label}>{draft.title} · {draft.duration}분 · {(categoryOverride&&getCategory(categoryOverride,userCategories)?.label)||categories[draft.category]} · 알림 {(categoryOverride&&getCategory(categoryOverride,userCategories)?.defaultReminderMin)??reminderFor(draft,loadRules()).minutes}분 전</Text></View>
- {field('제목',draft.title,title=>patch({title}))}<Text style={styles.label}>{draft.recurrence?'반복 시작일':'날짜'}</Text><DateTimeField label="일정 날짜" kind="date" value={draft.date} onChange={date=>patch({date})} disabled={busy}/><Text style={styles.label}>시간</Text><DateTimeField label="일정 시간" kind="time" value={draft.time} onChange={time=>patch({time,ambiguous:false})} disabled={busy}/>
- {draft.ambiguous&&(Platform.OS==='web'?(
- <AmPmDropdown onSelect={period=>{const n=period==='pm'?12:0;const resolved={...draft,time:String(Number(draft.time.slice(0,2))%12+n).padStart(2,'0')+draft.time.slice(2),ambiguous:false};if(draft.recurrence)patch(resolved);else void guarded(()=>proceed(resolved));}}/>
- ):(
- <View style={styles.row}>{[0,12].map(n=><View key={n}>{button((n?'오후':'오전')+(draft.recurrence?' 선택':'로 등록'),()=>{const resolved={...draft,time:String(Number(draft.time.slice(0,2))%12+n).padStart(2,'0')+draft.time.slice(2),ambiguous:false};if(draft.recurrence)patch(resolved);else void guarded(()=>proceed(resolved));},true)}</View>)}</View>
- ))}
+ {field('제목',draft.title,title=>patch({title}))}<Text style={styles.label}>{draft.recurrence?'반복 시작일':'날짜'}</Text><DateTimeField label="일정 날짜" kind="date" value={draft.date} onChange={date=>patch({date})} disabled={busy}/><Text style={styles.label}>시간</Text><DateTimeField label="일정 시간" kind="time" value={draft.time} timeAmbiguous={draft.ambiguous} onChange={time=>patch({time,ambiguous:false})} disabled={busy}/>
+ {draft.ambiguous&&Platform.OS!=='web'&&<View style={styles.row}>{[0,12].map(n=><View key={n}>{button((n?'오후':'오전')+(draft.recurrence?' 선택':'로 등록'),()=>{const resolved={...draft,time:String(Number(draft.time.slice(0,2))%12+n).padStart(2,'0')+draft.time.slice(2),ambiguous:false};if(draft.recurrence)patch(resolved);else void guarded(()=>proceed(resolved));},true)}</View>)}</View>}
  {field('소요 시간 (분)',String(draft.duration),v=>patch({duration:Number(v)}))}
  <Text>장소: {draft.location||'없음'} · 기본 소요 시간 60분</Text>
  <Text style={styles.label}>내 카테고리</Text><View style={styles.row}>{userCategories.map(c=><Pressable key={c.id} onPress={()=>{setCategoryOverride(c.id);patch({category:c.baseCategory as Category});}} style={[styles.categoryChoice,categoryOverride===c.id&&styles.categoryChoiceSelected]}><View style={[styles.categoryDot,{backgroundColor:c.color}]}/><Text style={styles.categoryChoiceText}>{categoryOverride===c.id?'✓ ':''}{c.label}</Text></Pressable>)}</View>

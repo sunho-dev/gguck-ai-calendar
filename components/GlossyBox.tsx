@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-// 김창민 팀원 프로토타입의 그라데이션 + 상단 하이라이트(광택) 버튼 스타일을 RN으로 재현.
+// 프로토타입의 그라데이션 + 상단 하이라이트(광택) 버튼 스타일을 RN으로 재현.
 // 그림자는 overflow 클리핑과 함께 쓰면 잘려서, 그림자(바깥 View)와 둥근 모서리 클리핑(안쪽 그라데이션)을 분리했다.
 export function GlossyBox({
   colors,
