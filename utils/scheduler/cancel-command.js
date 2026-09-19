@@ -1,5 +1,8 @@
 import {todayKST,addDays,stamp,clock} from './engine.js';
-export const hasCancelIntent=text=>/취소/.test(text);
+// "취소"뿐 아니라 "삭제"·"제거"도 같은 뜻으로 쓰는 사용자가 많고, 세 단어 모두
+// "~해줘/~해주세요/~해/~할래" 형태로 똑같이 활용되므로 하나의 어간군으로 묶는다.
+const CANCEL_WORD='(?:취소|삭제|제거)';
+export const hasCancelIntent=text=>new RegExp(CANCEL_WORD).test(text);
 function categoryFromQuery(text){
  if(/운동|클라이밍|헬스|러닝|산책|요가|수영/.test(text))return 'exercise';
  if(/업무|회의|미팅|출근/.test(text))return 'work';
@@ -9,8 +12,10 @@ function categoryFromQuery(text){
  return null;
 }
 export function findCancellation(text,events,now=new Date()){
- if(!/취소(?:\s*(?:해\s*줘|해\s*주세요|해|할래|해주세요|해줘))?[.!。]?\s*$/.test(text)||/취소\s*(?:하지|안|말|하지마)|취소.*(?:말아|아니)/.test(text))throw Error('취소 요청을 확인하지 못했어요. “내일 운동 취소”처럼 입력해 주세요. 아무 일정도 바꾸지 않았어요.');
- let q=text.trim().replace(/취소(?:\s*(?:해\s*줘|해\s*주세요|해|할래|해주세요|해줘))?[.!。]?\s*$/,'').trim();
+ const suffix=new RegExp(CANCEL_WORD+'(?:\\s*(?:해\\s*줘|해\\s*주세요|해|할래|해주세요|해줘))?[.!。]?\\s*$');
+ const negated=new RegExp(CANCEL_WORD+'\\s*(?:하지|안|말|하지마)|'+CANCEL_WORD+'.*(?:말아|아니)');
+ if(!suffix.test(text)||negated.test(text))throw Error('취소 요청을 확인하지 못했어요. “내일 운동 취소”처럼 입력해 주세요. 아무 일정도 바꾸지 않았어요.');
+ let q=text.trim().replace(suffix,'').trim();
  const scope=/전체|전부|모두/.test(q)?'all':/이후|앞으로/.test(q)?'following':'one';
  q=q.replace(/전체|전부|모두|이후|앞으로|반복|이번만|이번/g,'');
  // "9월 운동 카테고리 취소해줘"처럼 "카테고리"라는 말이 명시적으로 있을 때만
