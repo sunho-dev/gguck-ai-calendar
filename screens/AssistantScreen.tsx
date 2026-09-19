@@ -1,16 +1,15 @@
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as XLSX from 'xlsx';
 import {useRef,useState} from 'react';
 import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,Switch,useWindowDimensions} from 'react-native';
 import {AgendaPreview} from '../components/AgendaPreview';
-import {Toast} from '../components/Toast';
 import DateTimeField from '../components/DateTimeField';
 import {ColorDropdown} from '../components/ColorDropdown';
 import {RuleAwareImportReview} from '../components/RuleAwareImportReview';
 import {Choice,RepeatChoices,RepeatFields,recurrenceFor,type RepeatMode} from '../components/ScheduleControls';
 import {useScheduleStaging} from '../utils/useScheduleStaging';
-import {formatFriendlyDateTime} from '../utils/date';
 import {colors} from '../constants/colors';
 import type {Event} from '../types/schema';
 import {interpretEvent} from '../utils/interpretEvent';
@@ -21,25 +20,13 @@ import {categoryKey,loadRules,toEvent,toSchedule} from '../utils/scheduleAdapter
 import {applyAlias,interpretChat,normalizeChat,hasCancelIntent,findCancellation,cancellationTargets,check,alternatives,planSeries,categories,addDays,stamp,todayKST,matchesRule,reminderFor,type Schedule,type Category} from '../utils/scheduler';
 import {generateEventId} from '../utils/quickEntry';
 import {parseIcsContent,type ImportedEventDraft} from '../utils/icsImport';
-import {DEMO_EXCEL_CSV} from '../utils/demoImportData';
+import {DEMO_EXCEL_CSV,DEMO_ICS_CONTENT} from '../utils/demoImportData';
 import {interpretBulkImage,interpretBulkTable} from '../utils/bulkInterpret';
 import {loadMyName,saveMyName} from '../utils/myNameStorage';
 import {extractShiftLabel,suggestColorForLabel} from '../utils/shiftClassify';
 import {loadShiftColors,saveShiftColors,type ShiftColorMap} from '../utils/shiftColorStore';
 import {findCategoryForText,getCategory} from '../utils/categoryStore';
 import {useCategories} from '../utils/useCategories';
-
-// 사진 가져오기는 원래 expo-image-picker가 넘겨주는 asset.width/height로 리사이즈
-// 방향(가로/세로)을 정했는데, 파일 종류를 가리지 않는 단일 DocumentPicker로 통합하면서
-// 그 정보가 없어졌다. 웹에서는 Image 엘리먼트로 실제 픽셀 크기를 직접 읽어와 대체한다.
-function getImageSize(uri:string):Promise<{width:number;height:number}>{
- return new Promise((resolve,reject)=>{
-  const img=new Image();
-  img.onload=()=>resolve({width:img.naturalWidth,height:img.naturalHeight});
-  img.onerror=reject;
-  img.src=uri;
- });
-}
 
 type Scope='one'|'following'|'all';
 export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;onRules?:()=>void;onCalendar?:()=>void}){
@@ -86,61 +73,67 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  const lock=useRef(false);
  const all=()=>loadStoredEvents()||[];
  const handleMyNameChange=(value:string)=>{setMyName(value);saveMyName(value);};
- const handleImport=async()=>{
+ const handleImportIcs=async()=>{
   setImportError(null);
   const picked=await DocumentPicker.getDocumentAsync({type:'*/*'});
   if(picked.canceled)return;
   const asset=picked.assets[0];
-  const fileName=asset.name.toLowerCase();
-  if(fileName.endsWith('.ics')){
-   try{
-    const content=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
-    const drafts=parseIcsContent(content);
-    if(drafts.length===0){setImportError('.ics 파일에서 일정을 찾지 못했어요.');return;}
-    setImportSource('.ics 파일에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
-   }catch(err){console.warn('[ics-import] 실패:',err);setImportError('.ics 파일을 읽는 데 실패했어요.');}
-   return;
-  }
-  if(fileName.endsWith('.csv')||fileName.endsWith('.xlsx')||fileName.endsWith('.xls')){
-   if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
-   try{
-    let csvText:string;
-    if(fileName.endsWith('.csv')){
-     csvText=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
-    }else{
-     const buffer=asset.file?await asset.file.arrayBuffer():await(await fetch(asset.uri)).arrayBuffer();
-     const workbook=XLSX.read(buffer,{type:'array'});
-     csvText=XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
-    }
-    setIsImporting(true);
-    const drafts=await interpretBulkTable(csvText,myName);
-    setIsImporting(false);
-    if(drafts.length===0){setImportError('파일에서 일정을 찾지 못했어요.');return;}
-    setImportSource('엑셀 파일에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
-   }catch(err){setIsImporting(false);console.warn('[excel-import] 실패:',err);setImportError(err instanceof Error?err.message:'엑셀 파일을 처리하는 데 실패했어요.');}
-   return;
-  }
-  if(/\.(jpe?g|png|heic|heif|webp)$/.test(fileName)){
-   if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
-   if(typeof window!=='undefined')window.alert('방향이 돌아가지 않고 선명하게 찍힌 사진으로 준비해주세요.');
-   try{
-    setIsImporting(true);
-    const{width,height}=await getImageSize(asset.uri);
-    const maxDimension=1600,isLandscape=width>=height;
-    const resizeAction=isLandscape?{resize:{width:Math.min(width,maxDimension)}}:{resize:{height:Math.min(height,maxDimension)}};
-    const manipulated=await manipulateAsync(asset.uri,[resizeAction],{base64:true,compress:.7,format:SaveFormat.JPEG});
-    if(!manipulated.base64){setImportError('이미지를 처리하지 못했어요.');setIsImporting(false);return;}
-    const drafts=await interpretBulkImage(manipulated.base64,'image/jpeg',myName);
-    setIsImporting(false);
-    if(drafts.length===0){setImportError('사진에서 일정을 찾지 못했어요.');return;}
-    setImportSource('사진에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
-   }catch(err){setIsImporting(false);console.warn('[photo-import] 실패:',err);setImportError(err instanceof Error?err.message:'사진을 처리하는 데 실패했어요.');}
-   return;
-  }
-  setImportError('지원하지 않는 파일 형식이에요. .ics, 엑셀, 사진 파일만 가져올 수 있어요.');
+  try{
+   const content=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
+   const drafts=parseIcsContent(content);
+   if(drafts.length===0){setImportError('.ics 파일에서 일정을 찾지 못했어요.');return;}
+   setImportSource('.ics 파일에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
+  }catch(err){console.warn('[ics-import] 실패:',err);setImportError('.ics 파일을 읽는 데 실패했어요.');}
  };
- // 심사위원 등이 실제 파일 없이도 바로 눌러볼 수 있는 데모 버튼. 파일 선택 과정만
- // 생략할 뿐, 그 다음(실제 Gemini 호출까지)은 엑셀 가져오기와 동일한 경로를 탄다.
+ const handleImportExcel=async()=>{
+  setImportError(null);
+  if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
+  const picked=await DocumentPicker.getDocumentAsync({type:'*/*'});
+  if(picked.canceled)return;
+  const asset=picked.assets[0];
+  try{
+   let csvText:string;
+   if(asset.name.toLowerCase().endsWith('.csv')){
+    csvText=asset.file?await asset.file.text():await(await fetch(asset.uri)).text();
+   }else{
+    const buffer=asset.file?await asset.file.arrayBuffer():await(await fetch(asset.uri)).arrayBuffer();
+    const workbook=XLSX.read(buffer,{type:'array'});
+    csvText=XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
+   }
+   setIsImporting(true);
+   const drafts=await interpretBulkTable(csvText,myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('파일에서 일정을 찾지 못했어요.');return;}
+   setImportSource('엑셀 파일에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
+  }catch(err){setIsImporting(false);console.warn('[excel-import] 실패:',err);setImportError(err instanceof Error?err.message:'엑셀 파일을 처리하는 데 실패했어요.');}
+ };
+ const handleImportPhoto=async()=>{
+  setImportError(null);
+  if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
+  if(typeof window!=='undefined')window.alert('방향이 돌아가지 않고 선명하게 찍힌 사진으로 준비해주세요.');
+  const picked=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],quality:1});
+  if(picked.canceled)return;
+  const asset=picked.assets[0];
+  try{
+   setIsImporting(true);
+   const maxDimension=1600,isLandscape=asset.width>=asset.height;
+   const resizeAction=isLandscape?{resize:{width:Math.min(asset.width,maxDimension)}}:{resize:{height:Math.min(asset.height,maxDimension)}};
+   const manipulated=await manipulateAsync(asset.uri,[resizeAction],{base64:true,compress:.7,format:SaveFormat.JPEG});
+   if(!manipulated.base64){setImportError('이미지를 처리하지 못했어요.');setIsImporting(false);return;}
+   const drafts=await interpretBulkImage(manipulated.base64,'image/jpeg',myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('사진에서 일정을 찾지 못했어요.');return;}
+   setImportSource('사진에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
+  }catch(err){setIsImporting(false);console.warn('[photo-import] 실패:',err);setImportError(err instanceof Error?err.message:'사진을 처리하는 데 실패했어요.');}
+ };
+ // 심사위원 등이 실제 파일 없이도 바로 눌러볼 수 있는 데모 버튼들. 파일 선택 과정만
+ // 생략할 뿐, 그 다음(엑셀은 실제 Gemini 호출까지)은 실제 가져오기와 동일한 경로를 탄다.
+ const handleDemoIcs=()=>{
+  setImportError(null);
+  const drafts=parseIcsContent(DEMO_ICS_CONTENT);
+  if(drafts.length===0){setImportError('.ics 샘플에서 일정을 찾지 못했어요.');return;}
+  setImportSource('.ics 샘플 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
+ };
  const handleDemoExcel=async()=>{
   setImportError(null);
   if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
@@ -151,6 +144,25 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    if(drafts.length===0){setImportError('엑셀 샘플에서 일정을 찾지 못했어요.');return;}
    setImportSource('엑셀 샘플에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
   }catch(err){setIsImporting(false);console.warn('[demo-excel] 실패:',err);setImportError(err instanceof Error?err.message:'엑셀 샘플을 처리하는 데 실패했어요.');}
+ };
+ const handleDemoPhoto=async()=>{
+  setImportError(null);
+  if(!myName.trim()){setImportError('이름을 정확히 입력해 주세요.');return;}
+  try{
+   setIsImporting(true);
+   const response=await fetch('/demo/schedule-photo.jpg');
+   const blob=await response.blob();
+   const base64=await new Promise<string>((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onloadend=()=>resolve((reader.result as string).split(',')[1]);
+    reader.onerror=reject;
+    reader.readAsDataURL(blob);
+   });
+   const drafts=await interpretBulkImage(base64,'image/jpeg',myName);
+   setIsImporting(false);
+   if(drafts.length===0){setImportError('사진 샘플에서 일정을 찾지 못했어요.');return;}
+   setImportSource('사진 샘플에서 찾은 일정');setImportDrafts(drafts);ensureShiftColorsFor(drafts);
+  }catch(err){setIsImporting(false);console.warn('[demo-photo] 실패:',err);setImportError(err instanceof Error?err.message:'사진 샘플을 처리하는 데 실패했어요.');}
  };
  const handleConfirmImport=async(approved:Event[])=>{
   const shiftLike=importDrafts?isShiftLikeImport(importDrafts):false;
@@ -196,14 +208,11 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   saveStoredEvents([...all(),...created]);
   setSelectedDate(created[0].startDate);
   setDraft(null);setCategoryOverride(null);setIssues([]);setChoices([]);setSkipped([]);setText('');
-  const when=formatFriendlyDateTime(created[0].startDate,created[0].time);
-  const countSuffix=created.length>1?` 외 ${created.length-1}건`:'';
-  const confirmMessage=`${when}에 ${created[0].title}으로 일정이 등록되었습니다${countSuffix}`;
-  setNotice(`${confirmMessage}${warningText}`);
+  setNotice(`‘${created[0].title}’ ${created.length}개 등록 완료 · ${created[0].startDate} ${created[0].time} · 알림 ${created[0].remindMin}분 전${warningText}`);
   const status=await getGoogleSyncStatus();if(!status.connected)return;
   let synced=0;
   for(const e of created){const id=await syncEventCreate(e);if(id){synced++;saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}}
-  setNotice(`${confirmMessage} · Google ${synced}/${created.length} 반영${synced<created.length?' (일부 동기화 실패, 캘린더를 확인해 주세요)':''}${warningText}`);
+  setNotice(`로컬 ${created.length}개 등록 · Google ${synced}개 반영${synced<created.length?' · 일부 동기화 실패: Google 캘린더를 확인해 주세요.':''}${warningText}`);
  }
  async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
   setChoices([]);setIssues([]);
@@ -266,18 +275,25 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  const exceptionReasons=recurrencePlan?recurrencePlan.conflicts.flatMap(c=>c.reasons):(liveVerdict?.reasons||[]).filter(r=>r.action!=='warn');
  const canExcept=exceptionReasons.length>0&&exceptionReasons.every(r=>r.overridable&&r.ruleId);
  async function acceptExceptions(){if(!draft||!canExcept)return;await guarded(()=>proceed({...draft,ruleExceptions:[...new Set([...(draft.ruleExceptions||[]),...exceptionReasons.map(r=>r.ruleId!)])]},true));}
- return <><Toast message={notice} onDismiss={()=>setNotice('')}/><ScrollView style={styles.page} contentContainerStyle={{paddingBottom:40}}><Text style={styles.heading}>일정은 꾹에게 맡겨요.</Text><Text style={styles.label}>한 줄로 남기면, 시간과 규칙을 함께 살펴볼게요.</Text>
+ return <ScrollView style={styles.page} contentContainerStyle={{paddingBottom:40}}><Text style={styles.heading}>일정은 꾹에게 맡겨요.</Text><Text style={styles.label}>한 줄로 남기면, 시간과 규칙을 함께 살펴볼게요.</Text>
  <View style={[styles.columns,wide&&{flexDirection:'row'}]}><View style={{flex:wide?1.35:undefined,minWidth:0}}><View style={styles.panel}><Text style={styles.sectionTitle}>어떤 일정이 있나요?</Text>
- <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder="EX) 내일 오후 8시 집에서 운동, 매주 월수금 오후 8시 운동, 다음주 금요일 8시 종숲 ㄱ, 내일 운동 취소" placeholderTextColor="rgba(136,120,110,0.45)" editable={!busy}/>
+ <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder={'EX) 내일 오후 8시 집에서 운동\nEX) 매주 월수금 오후 8시 운동\nEX) 다음주 금요일 8시 종숲 ㄱ\nEX) 내일 운동 취소'} placeholderTextColor="rgba(136,120,110,0.45)" editable={!busy}/>
  {!hasCancelIntent(text)&&<><Text style={styles.label}>반복 방식</Text><RepeatChoices value={repeatMode} onChange={setRepeatMode} disabled={busy}/><Text style={styles.label}>문장에 적은 반복 조건이 우선해요.</Text></>}
  {button(busy?'처리 중…':hasCancelIntent(text)?'요청 보내기':'일정 등록',()=>void submit())}
  <Text style={styles.label}>확인이 필요할 때만 물어봐요. 소요 시간 생략 시 60분.</Text></View>
  {Platform.OS==='web'&&<View style={[styles.panel,styles.importPanel]}><Text style={styles.sectionTitle}>여러 일정 한 번에 가져오기</Text><Text style={styles.label}>.ics 파일, 근무표 엑셀, 근무표 사진에서 일정을 한 번에 뽑아 등록해요.</Text>
  {field('표/사진 속 내 이름',myName,handleMyNameChange)}
- {!importDrafts&&<View style={styles.row}>{button('가져오기',()=>void handleImport(),true,isImporting)}</View>}
- {!importDrafts&&<Text style={styles.label}>.ics, 엑셀, 사진 파일을 사용할 수 있어요.</Text>}
- {!importDrafts&&<View style={styles.row}><Choice label="샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoExcel()}/></View>}
- {!importDrafts&&<Text style={styles.label}>샘플 사용해보기를 할 땐 길선호, 김창민, 황수민 세 이름 중에 하나로 테스트 하세요.</Text>}
+ {!importDrafts&&<View style={styles.row}>
+ {button('.ics 가져오기',()=>void handleImportIcs(),true,isImporting)}
+ {button('엑셀 가져오기',()=>void handleImportExcel(),true,isImporting)}
+ {button('사진으로 가져오기',()=>void handleImportPhoto(),true,isImporting)}
+ </View>}
+ {!importDrafts&&<View style={styles.row}>
+ <Choice label="ics 샘플 사용해보기" disabled={isImporting} onPress={()=>handleDemoIcs()}/>
+ <Choice label="엑셀 샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoExcel()}/>
+ <Choice label="사진 샘플 사용해보기" disabled={isImporting} onPress={()=>void handleDemoPhoto()}/>
+ </View>}
+ {!importDrafts&&<Text style={styles.label}>엑셀, 사진 샘플을 사용할 땐 길선호, 김창민, 황수민 세 이름 중에 하나로 테스트해보세요.</Text>}
  {isImporting&&<View style={styles.row}><ActivityIndicator color={colors.terracotta}/><Text style={styles.label}>AI가 일정을 읽는 중…</Text></View>}
  {!!importError&&<Text style={styles.notice}>{importError}</Text>}
  {importDrafts&&isShiftLikeImport(importDrafts)&&<View style={styles.shiftColorPanel}>
@@ -286,6 +302,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  </View>}
  {importDrafts&&<RuleAwareImportReview title={importSource??'가져온 일정'} drafts={importDrafts} onConfirm={handleConfirmImport} onCancel={()=>setImportDrafts(null)}/>}
  </View>}
+ <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
  <View style={styles.panel}><Text style={styles.sectionTitle}>말 한마디가 일정이 되는 순간.</Text><Text style={styles.label}>등록도 취소도 한 문장으로. 일정은 이 브라우저에 저장돼요.</Text></View></View>
  <View style={{flex:wide?1:undefined,minWidth:0}}><AgendaPreview date={selectedDate} onDate={setSelectedDate} onRules={onRules} onCalendar={onCalendar}/></View></View>
  <Modal visible={!!draft||!!target||cancelChoices.length>0||!!failure} transparent animationType="fade" onRequestClose={close}>
@@ -323,6 +340,6 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
  </>:cancelChoices.map(c=><View key={c.id}>{button(`${c.date} ${c.time} · ${c.title}`,()=>{if(c.seriesId){setCancelChoices([]);setTarget(c);}else void guarded(()=>cancel(c,'one'));},true)}</View>)}
  {button('닫기',close,true)}
  {!!failure&&<Text accessibilityRole="alert" style={styles.notice}>{failure}</Text>}
- </ScrollView></View></Modal></ScrollView></>;
+ <Text style={styles.notice}>{notice}</Text></ScrollView></View></Modal></ScrollView>;
 }
 const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:18},shiftColorPanel:{backgroundColor:'#F6EEE4',borderRadius:12,padding:12,marginTop:10,marginBottom:10,gap:8},shiftColorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},shiftColorLabel:{fontSize:13,fontWeight:'600',color:colors.textDark},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},summaryLine:{flexDirection:'row',alignItems:'center',gap:7},categoryDot:{width:10,height:10,borderRadius:5,flexShrink:0},categoryChoice:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.lightBeige,paddingVertical:10,paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'transparent'},categoryChoiceSelected:{borderColor:colors.terracotta,backgroundColor:'#F7E8DF'},categoryChoiceText:{fontSize:13,color:colors.textDark,fontWeight:'600'},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});
