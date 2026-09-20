@@ -43,6 +43,11 @@ function getImageSize(uri:string):Promise<{width:number;height:number}>{
 
 type Scope='one'|'following'|'all';
 const SHARED_SYNC_MAX_WAIT_MS=4000;
+// 공유 등록 후 "돌아가기"로 앱 창을 닫는 기능은 실기기에서 동작을 확인한 크롬(홈 화면에 설치한 앱 포함)에서만 쓴다.
+// 삼성 인터넷은 window.close()가 페이지 내용만 비우고 앱 창은 남겨서 흰 화면이 된다(플립7 확인).
+// 그 밖의 브라우저는 검증 전이라 크롬 기반 변종(삼성/엣지/오페라/웨일 등)도 제외한다.
+// 지원하지 않는 브라우저에서는 닫기·확인창 없이 평소처럼 등록 완료 알림(토스트)만 보여준다.
+const CAN_CLOSE_WINDOW=typeof navigator!=='undefined'&&typeof navigator.userAgent==='string'&&/Chrome\//.test(navigator.userAgent)&&!/SamsungBrowser|EdgA|OPR\/|Whale|Firefox|DuckDuckGo|UCBrowser|MiuiBrowser|YaBrowser/i.test(navigator.userAgent);
 const AUTO_CANCEL_NOTICE='취소 요청으로 보여요. 자동으로 취소하지 않았어요. 내용을 확인하고 “요청 보내기”를 눌러 주세요.';
 export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted=()=>{},onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;autoSubmit?:boolean;onAutoSubmitted?:()=>void;onRules?:()=>void;onCalendar?:()=>void}){
  const userCategories=useCategories();
@@ -339,7 +344,8 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  useEffect(()=>{
   if(!autoSubmit||autoRan.current)return;
   autoRan.current=true;
-  sharedSession.current=true;
+  // 창 닫기를 지원하지 않는 브라우저는 공유 세션 전용 동작(확인창·동기화 대기 제한)을 꺼서 평소 등록과 똑같이 처리한다.
+  sharedSession.current=CAN_CLOSE_WINDOW;
   onAutoSubmitted();
   if(initialText.trim())void submit(true);
  },[]);
