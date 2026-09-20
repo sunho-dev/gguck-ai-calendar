@@ -42,6 +42,7 @@ function getImageSize(uri:string):Promise<{width:number;height:number}>{
 }
 
 type Scope='one'|'following'|'all';
+const SHARED_SYNC_MAX_WAIT_MS=4000;
 const AUTO_CANCEL_NOTICE='취소 요청으로 보여요. 자동으로 취소하지 않았어요. 내용을 확인하고 “요청 보내기”를 눌러 주세요.';
 export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted=()=>{},onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;autoSubmit?:boolean;onAutoSubmitted?:()=>void;onRules?:()=>void;onCalendar?:()=>void}){
  const userCategories=useCategories();
@@ -86,6 +87,10 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   if(changed){setShiftColors(next);saveShiftColors(next);}
  };
  const lock=useRef(false);
+ // 공유하기로 시작된 세션: 등록이 (구글 동기화까지) 끝나고 완료 알림이 사라지면 창을 닫아
+ // 사용자가 공유를 시작한 메신저로 바로 돌아가게 한다. 등록 성공 경로에서만 표시한다.
+ const sharedSession=useRef(false),[sharedDone,setSharedDone]=useState(false);
+ const finishShared=()=>{if(sharedSession.current)setSharedDone(true);};
  const all=()=>loadStoredEvents()||[];
  const handleMyNameChange=(value:string)=>{setMyName(value);saveMyName(value);};
  const handleImport=async()=>{
@@ -181,6 +186,22 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  });
  const close=()=>{if(lock.current)return;setDraft(null);setCategoryOverride(null);setUnknown(null);setTarget(null);setCancelChoices([]);setSelectedCancelIds(new Set());setIssues([]);setChoices([]);setSkipped([]);setFailure('');};
  async function guarded(job:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setFailure('');try{await job();}catch(e){setFailure(e instanceof Error?e.message:'처리하지 못했어요.');}finally{lock.current=false;setBusy(false);}}
+ // 구글 캘린더 동기화는 선택 기능이다. 연동이 안 돼 있거나 동기화가 실패해도(sync 함수들은
+ // 실패를 예외가 아니라 "연결 안 됨"/null로 돌려준다) 등록과 공유 세션 종료에는 영향이 없다.
+ // 공유 세션에서는 진행 중인 요청을 끊지 않으려고 최대 SHARED_SYNC_MAX_WAIT_MS까지만 기다리고,
+ // 그보다 느리면 동기화는 백그라운드로 두고 종료 준비를 한다.
+ async function syncOptional(created:Event[]){
+  const sync=(async()=>{
+   const status=await getGoogleSyncStatus();
+   if(!status.connected)return;
+   for(const e of created){const id=await syncEventCreate(e);if(id)saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}
+  })();
+  if(sharedSession.current){
+   sync.catch(()=>{});
+   await Promise.race([sync,new Promise<void>(resolve=>setTimeout(resolve,SHARED_SYNC_MAX_WAIT_MS))]);
+  }else await sync;
+  finishShared();
+ }
  async function persist(schedules:Schedule[]){
   const rules=loadRules(),seriesId=schedules[0]?.recurrence?`series-${Date.now()}`:undefined;
   const previous=all().map(toSchedule);const warningMessages=new Set<string>();
@@ -200,8 +221,7 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   const countSuffix=created.length>1?` 외 ${created.length-1}건`:'';
   const confirmMessage=`${when}에 ${created[0].title}으로 일정이 등록되었습니다${countSuffix}`;
   setNotice(`${confirmMessage}${warningText}`);
-  const status=await getGoogleSyncStatus();if(!status.connected)return;
-  for(const e of created){const id=await syncEventCreate(e);if(id)saveStoredEvents(all().map(x=>x.id===e.id?{...x,googleEventId:id}:x));}
+  await syncOptional(created);
  }
  async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
   setChoices([]);setIssues([]);
@@ -262,9 +282,7 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   const when=formatFriendlyDateTime(created.startDate,created.time);
   const confirmMessage=`${when}부터 ${created.endDate}까지 ${created.title} 일정이 등록되었습니다`;
   setNotice(confirmMessage);
-  const status=await getGoogleSyncStatus();if(!status.connected)return;
-  const googleEventId=await syncEventCreate(created);
-  if(googleEventId)saveStoredEvents(all().map(x=>x.id===created.id?{...x,googleEventId}:x));
+  await syncOptional([created]);
  }
  // auto=true는 공유하기로 들어온 문장을 사용자가 버튼을 누르기 전에 자동 처리할 때만 쓴다.
  // 등록은 평소와 똑같이 확인이 필요한 경우(모르는 장소·불확실한 시간·규칙 충돌)에 물어보지만,
@@ -318,9 +336,18 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  useEffect(()=>{
   if(!autoSubmit||autoRan.current)return;
   autoRan.current=true;
+  sharedSession.current=true;
   onAutoSubmitted();
   if(initialText.trim())void submit(true);
  },[]);
+ // 공유 세션에서 등록이 끝난 뒤 완료 알림(토스트)까지 사라지면 앱 창을 닫는다.
+ // window.close()는 브라우저가 "스크립트로 닫을 수 있는 창"에만 허용해서(공유로 열린 홈 화면 앱은
+ // 히스토리가 1개뿐이라 보통 허용) 기기에 따라 무시될 수 있다. 그 경우엔 앱이 그대로 열려 있을 뿐이다.
+ useEffect(()=>{
+  if(!sharedDone||notice)return;
+  sharedSession.current=false;setSharedDone(false);
+  if(typeof window!=='undefined')window.close();
+ },[sharedDone,notice]);
  const field=(label:string,value:string,change:(s:string)=>void)=><View><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} style={styles.input} value={value} onChangeText={change} editable={!busy}/></View>;
  const button=(label:string,onPress:()=>void,secondary=false,disabled=false)=><Pressable accessibilityRole="button" disabled={busy||disabled} onPress={onPress} style={[styles.button,secondary&&styles.secondary,(busy||disabled)&&{opacity:.5}]}><Text style={{color:secondary?colors.textDark:colors.white}}>{label}</Text></Pressable>;
  const patch=(p:Partial<Schedule>)=>{if(draft){setDraft({...draft,ruleExceptions:[],...p});setChoices([]);setIssues([]);setSkipped([]);}};
