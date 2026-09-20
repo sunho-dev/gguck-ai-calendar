@@ -87,10 +87,13 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   if(changed){setShiftColors(next);saveShiftColors(next);}
  };
  const lock=useRef(false);
- // 공유하기로 시작된 세션: 등록이 (구글 동기화까지) 끝나고 완료 알림이 사라지면 창을 닫아
- // 사용자가 공유를 시작한 메신저로 바로 돌아가게 한다. 등록 성공 경로에서만 표시한다.
- const sharedSession=useRef(false),[sharedDone,setSharedDone]=useState(false);
+ // 공유하기로 시작된 세션: 등록이 (구글 동기화 대기까지) 끝나면 토스트 대신 "돌아가기" 확인창을
+ // 띄우고, 사용자가 버튼을 누르면 창을 닫아 공유를 시작한 메신저로 돌아가게 한다.
+ // 확인창은 등록 성공 경로에서만 뜬다(실패하면 에러 창이 뜨고 앱은 그대로 남는다).
+ const sharedSession=useRef(false),[sharedDone,setSharedDone]=useState(false),[sharedMessage,setSharedMessage]=useState('');
  const finishShared=()=>{if(sharedSession.current)setSharedDone(true);};
+ // 등록 완료 문구를 보여주는 곳: 공유 세션이면 확인창용으로 보관, 아니면 평소처럼 토스트.
+ const announce=(message:string)=>{if(sharedSession.current){setNotice('');setSharedMessage(message);}else setNotice(message);};
  const all=()=>loadStoredEvents()||[];
  const handleMyNameChange=(value:string)=>{setMyName(value);saveMyName(value);};
  const handleImport=async()=>{
@@ -220,7 +223,7 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   const when=formatFriendlyDateTime(created[0].startDate,created[0].time);
   const countSuffix=created.length>1?` 외 ${created.length-1}건`:'';
   const confirmMessage=`${when}에 ${created[0].title}으로 일정이 등록되었습니다${countSuffix}`;
-  setNotice(`${confirmMessage}${warningText}`);
+  announce(`${confirmMessage}${warningText}`);
   await syncOptional(created);
  }
  async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
@@ -281,7 +284,7 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   setText('');
   const when=formatFriendlyDateTime(created.startDate,created.time);
   const confirmMessage=`${when}부터 ${created.endDate}까지 ${created.title} 일정이 등록되었습니다`;
-  setNotice(confirmMessage);
+  announce(confirmMessage);
   await syncOptional([created]);
  }
  // auto=true는 공유하기로 들어온 문장을 사용자가 버튼을 누르기 전에 자동 처리할 때만 쓴다.
@@ -340,14 +343,16 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   onAutoSubmitted();
   if(initialText.trim())void submit(true);
  },[]);
- // 공유 세션에서 등록이 끝난 뒤 완료 알림(토스트)까지 사라지면 앱 창을 닫는다.
- // window.close()는 브라우저가 "스크립트로 닫을 수 있는 창"에만 허용해서(공유로 열린 홈 화면 앱은
- // 히스토리가 1개뿐이라 보통 허용) 기기에 따라 무시될 수 있다. 그 경우엔 앱이 그대로 열려 있을 뿐이다.
- useEffect(()=>{
-  if(!sharedDone||notice)return;
-  sharedSession.current=false;setSharedDone(false);
+ // "돌아가기" 버튼: 앱 창을 닫는다. window.close()는 브라우저가 "스크립트로 닫을 수 있는 창"에만
+ // 허용해서(공유로 열린 홈 화면 앱은 히스토리가 1개뿐이라 보통 허용) 기기에 따라 무시될 수 있다.
+ // 무시돼 앱이 그대로 남아 있으면 확인창만 걷고, 직접 뒤로가기로 돌아가도록 안내한다.
+ const closeShared=()=>{
   if(typeof window!=='undefined')window.close();
- },[sharedDone,notice]);
+  setTimeout(()=>{
+   sharedSession.current=false;setSharedDone(false);setSharedMessage('');
+   setNotice('등록은 끝났어요. 뒤로가기로 돌아가 주세요.');
+  },400);
+ };
  const field=(label:string,value:string,change:(s:string)=>void)=><View><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} style={styles.input} value={value} onChangeText={change} editable={!busy}/></View>;
  const button=(label:string,onPress:()=>void,secondary=false,disabled=false)=><Pressable accessibilityRole="button" disabled={busy||disabled} onPress={onPress} style={[styles.button,secondary&&styles.secondary,(busy||disabled)&&{opacity:.5}]}><Text style={{color:secondary?colors.textDark:colors.white}}>{label}</Text></Pressable>;
  const patch=(p:Partial<Schedule>)=>{if(draft){setDraft({...draft,ruleExceptions:[],...p});setChoices([]);setIssues([]);setSkipped([]);}};
@@ -421,6 +426,8 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  </>:null}
  {button('닫기',close,true)}
  {!!failure&&<Text accessibilityRole="alert" style={styles.notice}>{failure}</Text>}
- </ScrollView></View></Modal></ScrollView></>;
+ </ScrollView></View></Modal>
+ <Modal visible={sharedDone&&!!sharedMessage} transparent animationType="fade" onRequestClose={closeShared}>
+ <View style={styles.overlay}><View style={[styles.modal,{padding:22}]}><Text style={{fontSize:17,color:colors.textDark,lineHeight:26,marginBottom:12}}>{sharedMessage}</Text>{button('돌아가기',closeShared)}</View></View></Modal></ScrollView></>;
 }
 const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:18},shiftColorPanel:{backgroundColor:'#F6EEE4',borderRadius:12,padding:12,marginTop:10,marginBottom:10,gap:8},shiftColorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},shiftColorLabel:{fontSize:13,fontWeight:'600',color:colors.textDark},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},summaryLine:{flexDirection:'row',alignItems:'center',gap:7},categoryDot:{width:10,height:10,borderRadius:5,flexShrink:0},categoryChoice:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.lightBeige,paddingVertical:10,paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'transparent'},categoryChoiceSelected:{borderColor:colors.terracotta,backgroundColor:'#F7E8DF'},cancelChoiceRow:{marginBottom:8},categoryChoiceText:{fontSize:13,color:colors.textDark,fontWeight:'600'},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});
