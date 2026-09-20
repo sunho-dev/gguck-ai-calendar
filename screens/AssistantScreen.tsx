@@ -59,6 +59,7 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  const [draft,setDraft]=useState<Schedule|null>(null),[unknown,setUnknown]=useState<string|null>(null);
  const [name,setName]=useState(''),[address,setAddress]=useState(''),[category,setCategory]=useState<Category>('personal'),[remember,setRemember]=useState(true);
  const [issues,setIssues]=useState<string[]>([]),[choices,setChoices]=useState<Schedule[]>([]),[skipped,setSkipped]=useState<string[]>([]);
+ const [meridiemAttention,setMeridiemAttention]=useState(false),[timeAttention,setTimeAttention]=useState(false),[showRepeatExceptions,setShowRepeatExceptions]=useState(false);
  const [cancelChoices,setCancelChoices]=useState<Schedule[]>([]),[target,setTarget]=useState<Schedule|null>(null),[scope,setScope]=useState<Scope>('one');
  const [selectedCancelIds,setSelectedCancelIds]=useState<Set<string>>(new Set());
  const [importDrafts,setImportDrafts]=useState<ImportedEventDraft[]|null>(null),[importSource,setImportSource]=useState<string|null>(null);
@@ -192,7 +193,7 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   if(result.unknown){setUnknown(result.unknown);setName('');setAddress('');setCategory(result.event.category);setRemember(true);}
   return {status:result.unknown?'clarification_required':'staged',draft:result.event};
  });
- const close=()=>{if(lock.current)return;setDraft(null);setCategoryOverride(null);setUnknown(null);setTarget(null);setCancelChoices([]);setSelectedCancelIds(new Set());setIssues([]);setChoices([]);setSkipped([]);setFailure('');};
+ const close=()=>{if(lock.current)return;setDraft(null);setCategoryOverride(null);setUnknown(null);setTarget(null);setCancelChoices([]);setSelectedCancelIds(new Set());setIssues([]);setChoices([]);setSkipped([]);setMeridiemAttention(false);setTimeAttention(false);setShowRepeatExceptions(false);setFailure('');};
  async function guarded(job:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setFailure('');try{await job();}catch(e){setFailure(e instanceof Error?e.message:'처리하지 못했어요.');}finally{lock.current=false;setBusy(false);}}
  // 구글 캘린더 동기화는 선택 기능이다. 연동이 안 돼 있거나 동기화가 실패해도(sync 함수들은
  // 실패를 예외가 아니라 "연결 안 됨"/null로 돌려준다) 등록과 공유 세션 종료에는 영향이 없다.
@@ -233,15 +234,20 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  }
  async function proceed(s:Schedule,confirmed=false,skip:string[]=skipped){
   setChoices([]);setIssues([]);
-  // 시간은 비워둘 수 있다("시간 미정"). 소요 시간은 비워두면(또는 0 이하면) 기본 60분으로.
+  // 일반 단일 일정은 시간을 확인받는다. 소요 시간은 비워두면(또는 0 이하면) 기본 60분으로.
   if(!Number.isFinite(s.duration)||s.duration<=0)s={...s,duration:60};
   const hasTime=!!s.time;
+  if(!hasTime){setDraft(s);setTimeAttention(true);setIssues(['시간을 먼저 선택해 주세요.']);return;}
   if(!/^\d{4}-\d{2}-\d{2}$/.test(s.date)||(hasTime&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time))||!s.title.trim()||s.duration<15||s.duration>480||(hasTime&&(!Number.isFinite(stamp(s.date,s.time))||todayKST(new Date(stamp(s.date,s.time)))!==s.date))){setDraft(s);setIssues(['날짜·제목과 소요 시간(15~480분)을 확인해 주세요.']);return;}
   if(s.ambiguous){setDraft(s);return;}
   const events=all().map(toSchedule),rules=loadRules();
   if(s.recurrence){
    const plan=planSeries(s,events,rules,skip);
-   if(!confirmed||plan.error||plan.conflicts.length||!plan.accepted.length){setDraft(s);setIssues(plan.error?[plan.error]:plan.conflicts.map(c=>`${c.event.date}: ${c.reasons.map(r=>r.message).join(' ')}`));return;}
+   if(!confirmed||plan.error||plan.conflicts.length||!plan.accepted.length){
+    setDraft(s);
+    setIssues(plan.error?[plan.error]:plan.conflicts.length?[`반복 일정 중 ${plan.conflicts.length}개 날짜에 확인이 필요해요. 아래에서 건너뛸 날짜를 선택해 주세요.`]:[]);
+    return;
+   }
    await persist(plan.accepted);return;
   }
   const verdict=check(s,events,rules);
@@ -312,7 +318,8 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
    if(/매주|매일|매월|평일|매달|격주|마다/.test(text))throw localError;
    // 로컬 규칙으로는 등록 문장인지 취소 문장인지조차 판단하지 못했다 — AI에게
    // 의도부터 물어보고, 그 결과에 맞는 해석(등록 또는 취소)만 이어서 진행한다.
-   const command=await interpretCommand({text});
+   const barePeriod=/\d+\s*일\s*동안|\d+\s*박\s*\d+\s*일/.test(text)&&!/(오늘|내일|모레|이번\s*주|다음\s*주|\d{4}-\d{2}-\d{2}|\d{1,2}월\s*\d{1,2}일|월요일|화요일|수요일|목요일|금요일|토요일|일요일)/.test(text);
+   const command=await interpretCommand({text:barePeriod?`${selectedDate}부터 ${text}`:text});
    if(command.intent==='cancel'){
     if(auto){setNotice(AUTO_CANCEL_NOTICE);return;}
     if(!command.cancellation)throw Error('취소할 내용을 확인하지 못했어요.');
@@ -333,6 +340,10 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
   }
   setCategoryOverride(findCategoryForText(`${text} ${event.title}`,event.category,userCategories).id);
   if(!event.recurrence&&repeatMode!=='none')event={...event,recurrence:recurrenceFor(repeatMode,event.date)};
+  const eventTimeMissing=!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.time||'');
+  setTimeAttention(eventTimeMissing);
+  setMeridiemAttention(!!event.ambiguous&&!eventTimeMissing);
+  setShowRepeatExceptions(false);
   if(/^\d{4}-\d{2}-\d{2}$/.test(event.date))setSelectedDate(event.date);
   if(unrecognized){setDraft(event);setUnknown(unrecognized);setName('');setAddress('');setCategory(event.category);setRemember(true);return;}
   if(needsReview){setDraft(event);setIssues(['AI가 불확실하게 해석한 정보가 있어요. 아래 값을 확인해 주세요.']);return;}
@@ -361,9 +372,12 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  };
  const field=(label:string,value:string,change:(s:string)=>void)=><View><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} style={styles.input} value={value} onChangeText={change} editable={!busy}/></View>;
  const button=(label:string,onPress:()=>void,secondary=false,disabled=false)=><Pressable accessibilityRole="button" disabled={busy||disabled} onPress={onPress} style={[styles.button,secondary&&styles.secondary,(busy||disabled)&&{opacity:.5}]}><Text style={{color:secondary?colors.textDark:colors.white}}>{label}</Text></Pressable>;
- const patch=(p:Partial<Schedule>)=>{if(draft){setDraft({...draft,ruleExceptions:[],...p});setChoices([]);setIssues([]);setSkipped([]);}};
+ const patch=(p:Partial<Schedule>)=>{if(draft){setDraft({...draft,ruleExceptions:[],...p});setChoices([]);setIssues([]);setSkipped([]);setMeridiemAttention(false);setTimeAttention(false);setShowRepeatExceptions(false);}};
  const recurrencePlan=draft?.recurrence?planSeries(draft,all().map(toSchedule),loadRules(),skipped):null;
- const liveVerdict=draft&&!draft.recurrence&&!draft.ambiguous?check(draft,all().map(toSchedule),loadRules()):null;
+ const baseRecurrencePlan=draft?.recurrence?planSeries(draft,all().map(toSchedule),loadRules(),[]):null;
+ const timeMissing=!!draft&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.time||'');
+ const meridiemAmbiguous=!!draft?.ambiguous&&!timeMissing;
+ const liveVerdict=draft&&!draft.recurrence&&!draft.ambiguous&&!timeMissing?check(draft,all().map(toSchedule),loadRules()):null;
  const liveChoices=draft&&liveVerdict&&!liveVerdict.ok?alternatives(draft,all().map(toSchedule),loadRules()):[];
  const exceptionReasons=recurrencePlan?recurrencePlan.conflicts.flatMap(c=>c.reasons):(liveVerdict?.reasons||[]).filter(r=>r.action!=='warn');
  const canExcept=exceptionReasons.length>0&&exceptionReasons.every(r=>r.overridable&&r.ruleId);
@@ -373,7 +387,7 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  <TextInput accessibilityLabel="일정 문장" multiline style={[styles.input,{minHeight:120,fontSize:19}]} value={text} onChangeText={setText} placeholder="EX) 내일 오후 8시 집에서 운동, 매주 월수금 오후 8시 운동, 다음주 금요일 8시 종숲 ㄱ, 내일 운동 취소" placeholderTextColor="rgba(136,120,110,0.45)" editable={!busy}/>
  {!hasCancelIntent(text)&&<><Text style={styles.label}>반복 방식</Text><RepeatChoices value={repeatMode} onChange={setRepeatMode} disabled={busy}/><Text style={styles.label}>문장에 적은 반복 조건이 우선해요.</Text></>}
  {button(busy?'처리 중…':hasCancelIntent(text)?'요청 보내기':'일정 등록',()=>void submit())}
- <Text style={styles.label}>확인이 필요할 때만 물어봐요. 시간 생략 시 시간 미정, 소요 시간 생략 시 60분으로 등록돼요.</Text></View>
+ <Text style={styles.label}>확인이 필요할 때만 물어봐요. 일반 일정은 시간을 확인하고, 여러 날 일정은 시간 없이도 등록할 수 있어요. 소요 시간 생략 시 60분으로 등록돼요.</Text></View>
  {Platform.OS==='web'&&<View style={[styles.panel,styles.importPanel]}><Text style={styles.sectionTitle}>여러 일정 한 번에 가져오기</Text><Text style={styles.label}>.ics 파일, 근무표 엑셀, 근무표 사진에서 일정을 한 번에 뽑아 등록해요.</Text>
  {field('표/사진 속 내 이름',myName,handleMyNameChange)}
  {!importDrafts&&<View style={styles.row}>{button('가져오기',()=>void handleImport(),true,isImporting)}</View>}
@@ -400,24 +414,26 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  {button('이 뜻으로 계속하기',()=>void guarded(async()=>{if(!name.trim())throw Error('뜻이나 장소 이름을 적어 주세요.');const value={term:unknown,meaning:name.trim(),location:address.trim()||name.trim(),category};if(remember)await savePlaceAlias({alias:unknown,name:value.meaning,address:address.trim()||null,category});setUnknown(null);await proceed(applyAlias(draft,value));}))}
  {button('원문 그대로 계속',()=>{setUnknown(null);void guarded(()=>proceed(draft));},true)}
  </>:draft?<>
- <Text style={styles.sectionTitle}>{draft.ambiguous?'오전일까요, 오후일까요?':draft.recurrence?'언제까지 함께할까요?':liveVerdict&&!liveVerdict.ok?'이 시간은 조정이 필요해요.':'일정 확인'}</Text>
- <View style={styles.summaryLine}><View style={[styles.categoryDot,{backgroundColor:(categoryOverride&&getCategory(categoryOverride,userCategories)?.color)||'#B9ADA2'}]}/><Text style={styles.label}>{draft.title} · {draft.time||'시간 미정'} · {draft.duration}분 · {(categoryOverride&&getCategory(categoryOverride,userCategories)?.label)||categories[draft.category]} · 알림 {draft.time?`${(categoryOverride&&getCategory(categoryOverride,userCategories)?.defaultReminderMin)??reminderFor(draft,loadRules()).minutes}분 전`:'시간 미정이라 알림 없음'}</Text></View>
- {field('제목',draft.title,title=>patch({title}))}<Text style={styles.label}>{draft.recurrence?'반복 시작일':'날짜'}</Text><DateTimeField label="일정 날짜" kind="date" value={draft.date} onChange={date=>patch({date})} disabled={busy}/><Text style={styles.label}>시간 (비워두면 시간 미정으로 등록돼요)</Text><DateTimeField label="일정 시간" kind="time" value={draft.time} timeAmbiguous={draft.ambiguous} onChange={time=>patch({time,ambiguous:false})} disabled={busy}/>
- {draft.ambiguous&&Platform.OS!=='web'&&<View style={styles.row}>{[0,12].map(n=><View key={n}>{button((n?'오후':'오전')+(draft.recurrence?' 선택':'로 등록'),()=>{const resolved={...draft,time:String(Number(draft.time.slice(0,2))%12+n).padStart(2,'0')+draft.time.slice(2),ambiguous:false};if(draft.recurrence)patch(resolved);else void guarded(()=>proceed(resolved));},true)}</View>)}</View>}
+ <Text style={styles.sectionTitle}>{timeMissing?'몇 시 일정인가요?':meridiemAmbiguous?'오전일까요, 오후일까요?':draft.recurrence?'언제까지 함께할까요?':liveVerdict&&!liveVerdict.ok?'이 시간은 조정이 필요해요.':'일정 확인'}</Text>
+ <View style={styles.summaryLine}><View style={[styles.categoryDot,{backgroundColor:(categoryOverride&&getCategory(categoryOverride,userCategories)?.color)||'#B9ADA2'}]}/><Text style={styles.label}>{draft.title} · {draft.time||'시간 미정'} · {draft.duration}분 · {(categoryOverride&&getCategory(categoryOverride,userCategories)?.label)||categories[draft.category]} · 알림 {draft.time?`${(categoryOverride&&getCategory(categoryOverride,userCategories)?.defaultReminderMin)??reminderFor(draft,loadRules()).minutes}분 전`:'시간을 정한 뒤 알림 설정'}</Text></View>
+ {field('제목',draft.title,title=>patch({title}))}<Text style={styles.label}>{draft.recurrence?'반복 시작일':'날짜'}</Text><DateTimeField label="일정 날짜" kind="date" value={draft.date} onChange={date=>patch({date})} disabled={busy}/><Text style={styles.label}>시간</Text><View style={timeAttention&&styles.attentionBox}><DateTimeField label="일정 시간" kind="time" value={draft.time} timeAmbiguous={draft.ambiguous} onChange={time=>patch({time,ambiguous:false})} disabled={busy}/></View>
+ {timeMissing&&<Text style={styles.notice}>시간을 입력하지 않았어요. 시간을 선택한 뒤 등록해 주세요.</Text>}
+ {meridiemAmbiguous&&Platform.OS!=='web'&&<View style={[styles.meridiemBox,meridiemAttention&&styles.attentionBox]}><Text style={styles.label}>입력한 {Number(draft.time.slice(0,2))%12||12}시는 오전인가요, 오후인가요?</Text><View style={styles.row}>{[0,12].map(n=><Pressable key={n} accessibilityRole="button" onPress={()=>{const resolved={...draft,time:String(Number(draft.time.slice(0,2))%12+n).padStart(2,'0')+draft.time.slice(2),ambiguous:false};setMeridiemAttention(false);setIssues([]);setDraft(resolved);}} style={[styles.meridiemButton,meridiemAttention&&styles.meridiemButtonAttention]}><Text style={styles.meridiemButtonText}>{n?'오후':'오전'} {String(Number(draft.time.slice(0,2))%12||12).padStart(2,'0')}:{draft.time.slice(3)}</Text></Pressable>)}</View>{meridiemAttention&&<Text style={styles.notice}>오전인지 오후인지 선택해 주세요.</Text>}</View>}
+ {meridiemAmbiguous&&Platform.OS==='web'&&meridiemAttention&&<Text style={styles.notice}>오전/오후 선택 항목을 확인해 주세요.</Text>}
  {field('소요 시간 (분)',String(draft.duration),v=>patch({duration:Number(v)}))}
  <Text>장소: {draft.location||'없음'} · 기본 소요 시간 60분</Text>
  <Text style={styles.label}>내 카테고리</Text><View style={styles.row}>{userCategories.map(c=><Pressable key={c.id} onPress={()=>{setCategoryOverride(c.id);patch({category:c.baseCategory as Category});}} style={[styles.categoryChoice,categoryOverride===c.id&&styles.categoryChoiceSelected]}><View style={[styles.categoryDot,{backgroundColor:c.color}]}/><Text style={styles.categoryChoiceText}>{categoryOverride===c.id?'✓ ':''}{c.label}</Text></Pressable>)}</View>
  <RepeatFields draft={draft} onChange={patch} disabled={busy}/>
  {draft.recurrence&&<><Text style={styles.label}>반복 종료일 (포함) · 최대 1년</Text><DateTimeField label="반복 종료일" kind="date" value={draft.recurrence.until} onChange={until=>patch({recurrence:{...draft.recurrence!,until}})} disabled={busy}/><Text style={styles.label}>전체 {recurrencePlan?.occurrences.length}회 · 등록 가능 {recurrencePlan?.accepted.length}회 · 확인 필요 {recurrencePlan?.conflicts.length}회 · 건너뛰기 {skipped.length}회</Text>
  {recurrencePlan?.error&&<Text style={styles.notice}>{recurrencePlan.error}</Text>}
- {recurrencePlan?.conflicts.map(c=><View key={c.event.date}><Text>{c.event.date}: {c.reasons.map(r=>r.message).join(' ')}</Text>{button('이 날짜 건너뛰기',()=>setSkipped([...skipped,c.event.date]),true)}</View>)}
- {skipped.map(date=><View key={date}>{button(`${date} 다시 포함`,()=>setSkipped(skipped.filter(d=>d!==date)),true)}</View>)}</>}
+ {!!baseRecurrencePlan?.conflicts.length&&<View style={styles.repeatExceptionSummary}><Text style={styles.label}>충돌하는 날짜 {baseRecurrencePlan.conflicts.length}개 · 건너뛸 날짜 {skipped.length}개</Text>{button(showRepeatExceptions?'건너뛸 날짜 접기':`건너뛸 날짜 선택 · ${skipped.length}개`,()=>setShowRepeatExceptions(v=>!v),true)}</View>}
+ {showRepeatExceptions&&!!baseRecurrencePlan?.conflicts.length&&<View style={styles.repeatExceptionList}>{baseRecurrencePlan.conflicts.map(c=>{const selected=skipped.includes(c.event.date);return <Pressable key={c.event.date} accessibilityRole="checkbox" accessibilityState={{checked:selected}} onPress={()=>setSkipped(selected?skipped.filter(d=>d!==c.event.date):[...skipped,c.event.date])} style={[styles.repeatExceptionRow,selected&&styles.repeatExceptionRowSelected]}><Text style={styles.repeatExceptionCheck}>{selected?'✓':'○'}</Text><View style={{flex:1}}><Text style={styles.repeatExceptionDate}>{c.event.date}</Text><Text style={styles.repeatExceptionReason}>{c.reasons.map(r=>r.message).join(' ')}</Text></View></Pressable>})}</View>}</>}
  {issues.map((message,i)=><Text key={i} style={styles.notice}>{message}</Text>)}
  {liveVerdict&&!liveVerdict.ok&&liveVerdict.reasons.map((r,i)=><Text key={i} style={styles.notice}>{r.message}</Text>)}
  {liveChoices.map(c=><View key={c.date+c.time}>{button(`${c.date} ${c.time}로 등록`,()=>void guarded(()=>proceed(c,true)),true)}</View>)}
  {draft&&!draft.recurrence&&liveVerdict&&!liveVerdict.ok&&!liveChoices.length&&<Text style={styles.notice}>앞으로 14일 안에 모든 규칙을 만족하는 시간이 없어요. 규칙을 수정하거나 이번만 예외로 등록할 수 있어요.</Text>}
- {canExcept&&button(draft.recurrence?'표시된 반복 회차의 규칙 위반을 허용하고 등록':'이번만 예외로 등록',()=>void acceptExceptions(),true,!!draft.ambiguous)}
- {button(draft.recurrence?`${recurrencePlan?.accepted.length||0}회 반복 일정 등록`:'확인하고 등록',()=>void guarded(()=>proceed(draft,true)),false,!!draft.ambiguous||!draft.title.trim()||!!(recurrencePlan&&(recurrencePlan.error||recurrencePlan.conflicts.length||!recurrencePlan.accepted.length))||!!(liveVerdict&&!liveVerdict.ok))}
+ {canExcept&&button(draft.recurrence?'표시된 반복 회차의 규칙 위반을 허용하고 등록':'이번만 예외로 등록',()=>void acceptExceptions(),true,timeMissing||meridiemAmbiguous)}
+ {button(draft.recurrence?`${recurrencePlan?.accepted.length||0}회 반복 일정 등록`:'확인하고 등록',()=>{if(timeMissing){setTimeAttention(true);setIssues(['시간을 먼저 선택해 주세요.']);return;}if(meridiemAmbiguous){setMeridiemAttention(true);setIssues(['오전인지 오후인지 선택해 주세요.']);return;}void guarded(()=>proceed(draft,true));},false,!draft.title.trim()||!!(recurrencePlan&&(recurrencePlan.error||recurrencePlan.conflicts.length||!recurrencePlan.accepted.length))||!!(liveVerdict&&!liveVerdict.ok))}
  </>:target?<>
  <Text>{target.title} · {target.date} {target.time}</Text><Text>어느 범위를 취소할까요?</Text>
  {(['one','following','all'] as Scope[]).map((s,i)=><View key={s}>{button((scope===s?'✓ ':'')+['이번만','선택 회차 및 이후','전체 반복'][i],()=>setScope(s),true)}</View>)}
@@ -436,4 +452,4 @@ export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted
  <Modal visible={sharedDone&&!!sharedMessage} transparent animationType="fade" onRequestClose={closeShared}>
  <View style={styles.overlay}><View style={[styles.modal,{padding:22}]}><Text style={{fontSize:17,color:colors.textDark,lineHeight:26,marginBottom:12}}>{sharedMessage}</Text>{button('돌아가기',closeShared)}</View></View></Modal></ScrollView></>;
 }
-const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:18},shiftColorPanel:{backgroundColor:'#F6EEE4',borderRadius:12,padding:12,marginTop:10,marginBottom:10,gap:8},shiftColorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},shiftColorLabel:{fontSize:13,fontWeight:'600',color:colors.textDark},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},summaryLine:{flexDirection:'row',alignItems:'center',gap:7},categoryDot:{width:10,height:10,borderRadius:5,flexShrink:0},categoryChoice:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.lightBeige,paddingVertical:10,paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'transparent'},categoryChoiceSelected:{borderColor:colors.terracotta,backgroundColor:'#F7E8DF'},cancelChoiceRow:{marginBottom:8},categoryChoiceText:{fontSize:13,color:colors.textDark,fontWeight:'600'},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});
+const styles=StyleSheet.create({page:{width:'100%',maxWidth:1400,padding:24},columns:{gap:24},panel:{padding:24,backgroundColor:'#FFFAF4',borderRadius:18,borderWidth:1,borderColor:'#E5D8CB'},importPanel:{marginTop:18},shiftColorPanel:{backgroundColor:'#F6EEE4',borderRadius:12,padding:12,marginTop:10,marginBottom:10,gap:8},shiftColorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},shiftColorLabel:{fontSize:13,fontWeight:'600',color:colors.textDark},sectionTitle:{fontSize:17,fontWeight:'600',color:colors.textDark,marginVertical:10},summaryLine:{flexDirection:'row',alignItems:'center',gap:7},categoryDot:{width:10,height:10,borderRadius:5,flexShrink:0},categoryChoice:{flexDirection:'row',alignItems:'center',gap:7,backgroundColor:colors.lightBeige,paddingVertical:10,paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'transparent'},categoryChoiceSelected:{borderColor:colors.terracotta,backgroundColor:'#F7E8DF'},cancelChoiceRow:{marginBottom:8},categoryChoiceText:{fontSize:13,color:colors.textDark,fontWeight:'600'},heading:{fontSize:30,fontWeight:'700',color:colors.textDark,marginBottom:12},label:{fontSize:13,color:colors.warmGray,marginVertical:8,lineHeight:21},input:{backgroundColor:'#F6EEE4',padding:14,borderRadius:12,color:colors.textDark,marginBottom:8},button:{backgroundColor:colors.terracotta,padding:12,borderRadius:10,marginVertical:5,alignItems:'center'},secondary:{backgroundColor:colors.lightBeige},row:{flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'},notice:{color:colors.terracotta,marginVertical:12,lineHeight:22},attentionBox:{borderWidth:2,borderColor:'#D76B4F',borderRadius:12,padding:4,backgroundColor:'#FFF3EC'},meridiemBox:{marginVertical:10,padding:12,borderRadius:12,backgroundColor:'#F8F1E8'},meridiemButton:{minWidth:125,paddingVertical:11,paddingHorizontal:14,borderRadius:10,backgroundColor:'#F0E4D8',borderWidth:1,borderColor:'#E4D3C2',alignItems:'center'},meridiemButtonAttention:{borderWidth:2,borderColor:'#D76B4F',backgroundColor:'#FFF3EC'},meridiemButtonText:{color:colors.textDark,fontWeight:'700'},repeatExceptionSummary:{marginTop:10,padding:12,borderRadius:12,backgroundColor:'#F8F1E8'},repeatExceptionList:{marginTop:8,gap:8},repeatExceptionRow:{flexDirection:'row',alignItems:'flex-start',gap:10,padding:12,borderWidth:1,borderColor:'#E4D3C2',borderRadius:12,backgroundColor:'#FFFCF8'},repeatExceptionRowSelected:{borderColor:colors.terracotta,backgroundColor:'#F7E8DF'},repeatExceptionCheck:{fontSize:18,color:colors.terracotta,lineHeight:22},repeatExceptionDate:{fontSize:14,fontWeight:'700',color:colors.textDark},repeatExceptionReason:{fontSize:12,color:colors.warmGray,lineHeight:18,marginTop:3},overlay:{flex:1,backgroundColor:'#0006',alignItems:'center',justifyContent:'center',padding:20},modal:{backgroundColor:colors.cream,borderRadius:20,width:'100%',maxWidth:560,maxHeight:'90%'}});

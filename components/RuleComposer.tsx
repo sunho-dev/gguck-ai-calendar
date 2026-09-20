@@ -1,5 +1,5 @@
 import {useRef,useState} from 'react';
-import {Text,TextInput,View,Switch} from 'react-native';
+import {Pressable,StyleSheet,Text,TextInput,View,Switch} from 'react-native';
 import {Choice,controlStyles} from './ScheduleControls';
 import {parseRule,validateRule,describeRule,actionLabels,type PersonalRule,type Rules,type RuleAction} from '../utils/scheduler';
 import {interpretRuleInput} from '../utils/ruleInput';
@@ -24,7 +24,14 @@ export function RuleComposer({rules,onChange}:{rules:Rules;onChange:(r:Rules)=>b
  return <View style={{gap:10}}><Text style={{fontSize:19,fontWeight:'600'}}>말로 만드는 내 규칙</Text><Text>해석 결과를 확인하고 저장해요. 여러 조건은 하나씩 추가해 주세요. 기간이 정해진 규칙(일주일간·이번 주만)은 지원하지 않아요.</Text>
  <TextInput accessibilityLabel="규칙 문장" editable={!busy} value={text} onChangeText={v=>{setText(v);setDraft(null);setError('');}} style={controlStyles.input} placeholder="운동 다음 날은 쉬기" multiline maxLength={300}/>
  <View style={controlStyles.row}>{examples.map(s=><Choice key={s} label={s} disabled={busy} onPress={()=>{setText(s);setDraft(null);setEditing(null);setError('');}}/>)}</View>
- <Choice label={busy?'해석 중…':'규칙 해석하기'} disabled={busy||!text.trim()} onPress={()=>void interpret()}/>
+ <Pressable
+  accessibilityRole="button"
+  disabled={busy||!text.trim()}
+  onPress={()=>void interpret()}
+  style={[styles.interpretButton,(busy||!text.trim())&&styles.disabled]}
+ >
+  <Text style={styles.interpretButtonText}>{busy?'해석 중…':'규칙 해석하기'}</Text>
+ </Pressable>
  {!!error&&<Text accessibilityRole="alert">{error}</Text>}
  {draft&&<View style={{gap:10,padding:16,backgroundColor:'#F6EEE4',borderRadius:12}}><Text>이렇게 기억할게요: {describeRule(draft)}</Text>
  <Text>대상 카테고리</Text><View style={controlStyles.row}><Choice label="전체" selected={draft.category==='all'} onPress={()=>setDraft({...draft,category:'all'})}/>{userCategories.map(c=><Choice key={c.id} label={c.label} selected={draft.category===c.baseCategory} onPress={()=>setDraft({...draft,category:c.baseCategory})}/>)}</View>
@@ -36,3 +43,19 @@ export function RuleComposer({rules,onChange}:{rules:Rules;onChange:(r:Rules)=>b
  <Text>알림 규칙이 여러 개 맞으면 목록에서 마지막으로 저장한 규칙을 적용해요. 변경은 새 일정부터 적용돼요.</Text>
  </View>;
 }
+
+
+const styles=StyleSheet.create({
+ interpretButton:{
+  alignItems:'center',
+  justifyContent:'center',
+  paddingVertical:11,
+  paddingHorizontal:14,
+  borderRadius:10,
+  backgroundColor:'#E7EDF7',
+  borderWidth:1,
+  borderColor:'#AAB8D1',
+ },
+ interpretButtonText:{color:'#4D607F',fontWeight:'700'},
+ disabled:{opacity:.45},
+});

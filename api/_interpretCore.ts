@@ -116,7 +116,7 @@ export function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[
     `기준 시각: ${nowIso}. ISO 시각의 오프셋을 존중하고 한국 시간 Asia/Seoul로 날짜를 계산하라. 주 시작은 월요일이다.`,
     '먼저 intent를 판단하라: 새 일정을 등록하려는 문장이면 "register", 이미 등록된 일정을 취소·삭제·제거하려는 문장이면 "cancel"이다. register면 event를 채우고 cancellation은 null. cancel이면 cancellation을 채우고 event는 null.',
     '[intent=register일 때 event 필드 규칙]',
-    '날짜는 YYYY-MM-DD. 단일 일정의 startDate와 endDate는 같다. 없는 시간과 소요 시간은 null. 8시처럼 오전·오후가 불분명하면 ambiguousFields에 time을 넣어라. 날짜가 없으면 startDate를 빈 문자열로 두고 ambiguousFields에 startDate를 넣어라.',
+    '날짜는 YYYY-MM-DD. 단일 일정의 startDate와 endDate는 같다. 여러 날에 걸친 일정(예: 5일 동안 여행, 3박 4일 출장, 월요일부터 금요일까지)은 startDate와 마지막 포함 날짜인 endDate를 다르게 채워라. “N일 동안”은 시작일을 1일차로 계산하고, “N박 M일”은 M일 일정으로 계산한다. 없는 시간과 소요 시간은 null. 8시처럼 오전·오후가 불분명하면 ambiguousFields에 time을 넣어라. 날짜가 없으면 startDate를 빈 문자열로 두고 ambiguousFields에 startDate를 넣어라.',
     'category는 운동/업무/개인/공부/건강 등 짧은 분류다. 명시적 행동이 장소의 기본 활동이나 개인 사전 카테고리보다 우선한다. 병원에서 업무 미팅=업무, 집에서 운동=운동.',
     '집, 우리집, 본가, 병원, 치과, 약국, 회사, 학교, 도서관, 카페는 일반 단어다. 정확한 주소를 모른다는 이유로 뜻을 묻거나 placeAliasCandidate로 지정하지 마라. 원문의 장소 이름을 쓰고 address는 null로 둔다. 병원/치과 진료는 건강, 본가 방문은 개인이다.',
     '정확히 일치하는 개인 별칭은 제공된 이름과 주소를 적용하고 placeAliasCandidate는 null. 사전에 없는 종숲·구로숲 같은 표현은 원문 그대로 place.name과 placeAliasCandidate에 넣고 ambiguousFields에 place를 넣어 확인받아라.',
