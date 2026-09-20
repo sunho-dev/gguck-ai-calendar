@@ -1,4 +1,4 @@
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../constants/colors';
 import { disconnectGoogle, startGoogleConnect } from '../utils/googleSync';
@@ -7,8 +7,12 @@ import { AppLogo } from './AppLogo';
 import { GlossyBox } from './GlossyBox';
 import {useStoredEvents} from '../utils/useStoredEvents';
 
-const PRIVACY_POLICY_URL = 'https://sites.google.com/view/intelpartners';
-const TERMS_OF_SERVICE_URL = 'https://sites.google.com/view/intelpartnersyakgwan';
+// 구글 OAuth 검수는 개인정보처리방침이 서비스와 같은 도메인에 있어야 해서(구글 사이트 도구 등
+// 소유권을 인증할 수 없는 외부 플랫폼은 거절됨) public/privacy.html, public/terms.html을
+// 이 앱과 같은 도메인에서 서빙한다. 웹에서는 상대 경로, 네이티브에서는 배포 주소로 연다.
+const SITE_ORIGIN = Platform.OS === 'web' ? '' : 'https://gguck-flame.vercel.app';
+const PRIVACY_POLICY_URL = `${SITE_ORIGIN}/privacy`;
+const TERMS_OF_SERVICE_URL = `${SITE_ORIGIN}/terms`;
 
 export type NavKey = 'calendar' | 'categories' | 'assistant' | 'rules' | 'alerts';
 
