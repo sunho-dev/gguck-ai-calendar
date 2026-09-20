@@ -52,10 +52,10 @@ const styles=StyleSheet.create({
   paddingVertical:11,
   paddingHorizontal:14,
   borderRadius:10,
-  backgroundColor:'#E7EDF7',
+  backgroundColor:'#C56F5D',
   borderWidth:1,
-  borderColor:'#AAB8D1',
+  borderColor:'#C56F5D',
  },
- interpretButtonText:{color:'#4D607F',fontWeight:'700'},
+ interpretButtonText:{color:'#FFFFFF',fontWeight:'700'},
  disabled:{opacity:.45},
 });

@@ -397,9 +397,14 @@ export function CalendarScreen({onCompose,onCategories=()=>{}}:{onCompose:(text:
   };
 
   const handleEdit = (event: Event) => {
-    const [hour, minute] = event.time.split(':');
-    const minuteLabel = minute !== '00' ? ` ${Number(minute)}분` : '';
-    setInputText(`${Number(hour)}시${minuteLabel} ${event.title}`);
+    if (!event.time) {
+      // 시간 미정 일정은 0시 같은 가짜 시간을 만들지 않고 제목만 편집 입력창에 넣는다.
+      setInputText(event.title);
+    } else {
+      const [hour, minute] = event.time.split(':');
+      const minuteLabel = minute !== '00' ? ` ${Number(minute)}분` : '';
+      setInputText(`${Number(hour)}시${minuteLabel} ${event.title}`);
+    }
     setSelectedDate(event.startDate);
     setEditingId(event.id);
     setErrorMessage(null);
