@@ -28,8 +28,12 @@ function readSharedText(): string | null {
 
 export default function App() {
   // 공유된 텍스트는 일정 비서로 넘길 때 사용할 수 있게 먼저 보관한다.
-  const [assistantText, setAssistantText] = useState(() => readSharedText() ?? '');
-  const [activeNav, setActiveNav] = useState<NavKey>(()=>readSharedText()?'assistant':'calendar');
+  const [shared] = useState(() => readSharedText());
+  const [assistantText, setAssistantText] = useState(shared ?? '');
+  const [activeNav, setActiveNav] = useState<NavKey>(shared ? 'assistant' : 'calendar');
+  // 공유 시트로 앱이 열린 경우에만 일정 비서가 "일정 등록" 버튼을 알아서 한 번 누른다.
+  // 캘린더/알림에서 문장을 넘겨받아 여는 경우는 사용자가 직접 확인하고 누르게 그대로 둔다.
+  const [autoSubmit, setAutoSubmit] = useState(!!shared);
   const { width } = useWindowDimensions();
   const mobile = width < 700;
 
@@ -53,7 +57,7 @@ export default function App() {
             ) : activeNav === 'categories' ? (
               <CategoriesScreen onCalendar={()=>setActiveNav('calendar')} />
             ) : activeNav === 'assistant' ? (
-              <AssistantScreen initialText={assistantText} onRules={()=>setActiveNav('rules')} onCalendar={()=>setActiveNav('calendar')} />
+              <AssistantScreen initialText={assistantText} autoSubmit={autoSubmit} onAutoSubmitted={()=>{setAutoSubmit(false);setAssistantText('');}} onRules={()=>setActiveNav('rules')} onCalendar={()=>setActiveNav('calendar')} />
             ) : (
               activeNav==='rules'?<RulesScreen />:<AlertsScreen onCompose={()=>setActiveNav('assistant')} />
             )}

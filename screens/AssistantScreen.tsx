@@ -1,7 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as XLSX from 'xlsx';
-import {useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Modal,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,Switch,useWindowDimensions} from 'react-native';
 import {AgendaPreview} from '../components/AgendaPreview';
 import {Toast} from '../components/Toast';
@@ -42,7 +42,8 @@ function getImageSize(uri:string):Promise<{width:number;height:number}>{
 }
 
 type Scope='one'|'following'|'all';
-export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;onRules?:()=>void;onCalendar?:()=>void}){
+const AUTO_CANCEL_NOTICE='취소 요청으로 보여요. 자동으로 취소하지 않았어요. 내용을 확인하고 “요청 보내기”를 눌러 주세요.';
+export function AssistantScreen({initialText='',autoSubmit=false,onAutoSubmitted=()=>{},onRules=()=>{},onCalendar=()=>{}}:{initialText?:string;autoSubmit?:boolean;onAutoSubmitted?:()=>void;onRules?:()=>void;onCalendar?:()=>void}){
  const userCategories=useCategories();
  const [categoryOverride,setCategoryOverride]=useState<string|null>(null);
  const [repeatMode,setRepeatMode]=useState<RepeatMode>('none'),[selectedDate,setSelectedDate]=useState(todayKST());
@@ -265,9 +266,14 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   const googleEventId=await syncEventCreate(created);
   if(googleEventId)saveStoredEvents(all().map(x=>x.id===created.id?{...x,googleEventId}:x));
  }
- async function submit(){await guarded(async()=>{
+ // auto=true는 공유하기로 들어온 문장을 사용자가 버튼을 누르기 전에 자동 처리할 때만 쓴다.
+ // 등록은 평소와 똑같이 확인이 필요한 경우(모르는 장소·불확실한 시간·규칙 충돌)에 물어보지만,
+ // 취소는 확인 없이 바로 실행되는 경로가 있어서 자동 실행에서는 절대 취소하지 않는다
+ // (예: 카톡의 "약속 취소됐어" 문장을 공유했다고 기존 일정이 조용히 지워지면 안 된다).
+ async function submit(auto=false){await guarded(async()=>{
   setNotice('');setCategoryOverride(null);setSkipped([]);setIssues([]);setChoices([]);
   if(hasCancelIntent(text)){
+   if(auto){setNotice(AUTO_CANCEL_NOTICE);return;}
    const r=findCancellation(normalizeChat(text),all().map(toSchedule));setScope(r.scope);
    if(!r.matches.length)throw Error('일치하는 일정이 없어요.');
    if(r.matches.length===1&&!r.matches[0].seriesId){await cancel(r.matches[0],'one');return;}
@@ -282,6 +288,7 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
    // 의도부터 물어보고, 그 결과에 맞는 해석(등록 또는 취소)만 이어서 진행한다.
    const command=await interpretCommand({text});
    if(command.intent==='cancel'){
+    if(auto){setNotice(AUTO_CANCEL_NOTICE);return;}
     if(!command.cancellation)throw Error('취소할 내용을 확인하지 못했어요.');
     const c=command.cancellation;
     const r=matchCancellation({query:c.title||'',category:c.category?categoryKey(c.category):null,date:c.date,month:c.month,times:c.time?[c.time]:null,scope:c.scope},all().map(toSchedule));
@@ -305,6 +312,15 @@ export function AssistantScreen({initialText='',onRules=()=>{},onCalendar=()=>{}
   if(needsReview){setDraft(event);setIssues(['AI가 불확실하게 해석한 정보가 있어요. 아래 값을 확인해 주세요.']);return;}
   await proceed(event,false,[]);
  });}
+ // 공유하기로 열린 경우: 입력창에 채워진 문장으로 "일정 등록" 버튼을 한 번만 자동으로 누른다.
+ // ref로 막아서 개발 모드의 이펙트 이중 실행이나 재렌더로 두 번 등록되는 일이 없게 한다.
+ const autoRan=useRef(false);
+ useEffect(()=>{
+  if(!autoSubmit||autoRan.current)return;
+  autoRan.current=true;
+  onAutoSubmitted();
+  if(initialText.trim())void submit(true);
+ },[]);
  const field=(label:string,value:string,change:(s:string)=>void)=><View><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} style={styles.input} value={value} onChangeText={change} editable={!busy}/></View>;
  const button=(label:string,onPress:()=>void,secondary=false,disabled=false)=><Pressable accessibilityRole="button" disabled={busy||disabled} onPress={onPress} style={[styles.button,secondary&&styles.secondary,(busy||disabled)&&{opacity:.5}]}><Text style={{color:secondary?colors.textDark:colors.white}}>{label}</Text></Pressable>;
  const patch=(p:Partial<Schedule>)=>{if(draft){setDraft({...draft,ruleExceptions:[],...p});setChoices([]);setIssues([]);setSkipped([]);}};
