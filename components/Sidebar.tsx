@@ -1,10 +1,11 @@
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../constants/colors';
 import { disconnectGoogle, startGoogleConnect } from '../utils/googleSync';
 import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { AppLogo } from './AppLogo';
 import { GlossyBox } from './GlossyBox';
+import { LegalLink } from './LegalLink';
 import {useStoredEvents} from '../utils/useStoredEvents';
 
 // 구글 OAuth 검수는 개인정보처리방침이 서비스와 같은 도메인에 있어야 해서(구글 사이트 도구 등
@@ -83,13 +84,9 @@ export function Sidebar({
             </Text>
           </Pressable>
           <View style={styles.mobileLegalGroup}>
-            <Pressable onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
-              <Text style={styles.legalLink}>개인정보처리방침</Text>
-            </Pressable>
+            <LegalLink url={PRIVACY_POLICY_URL} label="개인정보처리방침" />
             <Text style={styles.legalDivider}>·</Text>
-            <Pressable onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}>
-              <Text style={styles.legalLink}>이용약관</Text>
-            </Pressable>
+            <LegalLink url={TERMS_OF_SERVICE_URL} label="이용약관" />
           </View>
         </View>
         <View style={styles.bottomNav}>
@@ -210,13 +207,9 @@ export function Sidebar({
       </View>
 
       <View style={[styles.legalRow, compact && styles.legalRowCompact]}>
-        <Pressable onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
-          <Text style={styles.legalLink}>{compact ? '방침' : '개인정보처리방침'}</Text>
-        </Pressable>
+        <LegalLink url={PRIVACY_POLICY_URL} label={compact ? '방침' : '개인정보처리방침'} />
         {!compact && <Text style={styles.legalDivider}>·</Text>}
-        <Pressable onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}>
-          <Text style={styles.legalLink}>{compact ? '약관' : '이용약관'}</Text>
-        </Pressable>
+        <LegalLink url={TERMS_OF_SERVICE_URL} label={compact ? '약관' : '이용약관'} />
       </View>
     </View>
   );
