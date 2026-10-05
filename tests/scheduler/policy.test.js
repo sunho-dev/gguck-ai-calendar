@@ -1,41 +1,167 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {check,alternatives,initialRules,restoreRules} from '../../utils/scheduler/engine.js';
-import {parseRule,validateRule,reminderFor,matchesRule} from '../../utils/scheduler/policy.js';
-import {planSeries} from '../../utils/scheduler/recurrence.js';
-const now=Date.parse('2026-09-14T00:00:00+09:00');
-const e={id:'new',title:'운동',date:'2026-09-17',time:'18:00',duration:60,category:'exercise'};
-const r=text=>({...initialRules,gap:0,weekendWork:false,items:[parseRule(text)]});
-const old=(p={})=>({...e,id:'old',date:'2026-09-16',...p});
-test('규칙01 다음 날 휴식 위반',()=>assert.equal(check(e,[old()],r('운동 다음 날은 쉬기'),now).ok,false));
-test('규칙02 하루 완전 휴식 후 허용',()=>assert.equal(check({...e,date:'2026-09-18'},[old()],r('운동 다음 날은 쉬기'),now).ok,true));
-test('규칙03 미래에 이미 있는 운동 앞날에도 휴식 검사',()=>assert.equal(check(e,[old({date:'2026-09-18'})],r('운동 다음 날은 쉬기'),now).ok,false));
-test('규칙04 취소된 일정은 휴식 조건에서 제외',()=>assert.equal(check(e,[old({cancelledAt:'yes'})],r('운동 다음 날은 쉬기'),now).ok,true));
-test('규칙05 다른 카테고리는 휴식 조건에서 제외',()=>assert.equal(check(e,[old({category:'work'})],r('운동 다음 날은 쉬기'),now).ok,true));
-test('규칙06 주간 최대 횟수',()=>assert.equal(check(e,[old()],r('운동 주 1회 이하'),now).ok,false));
-test('규칙07 다음 주 횟수 초기화',()=>assert.equal(check({...e,date:'2026-09-21'},[old()],r('운동 주 1회 이하'),now).ok,true));
-test('규칙08 자신을 수정할 때 횟수 중복 없음',()=>assert.equal(check(e,[e],r('운동 주 1회 이하'),now).ok,true));
-test('규칙09 경고는 등록 허용과 함께 반환',()=>{const v=check({...e,time:'21:00'},[],r('운동 오후 8시 이후는 알려줘'),now);assert.equal(v.ok,true);assert.equal(v.warnings.length,1);});
-test('규칙10 확인 규칙은 사용자 확인까지 정지',()=>assert.equal(check({...e,time:'21:00'},[],r('운동 오후 8시 이후는 확인해줘'),now).ok,false));
-test('규칙11 이번만 예외는 해당 규칙만 통과',()=>{const rules=r('운동 다음 날은 쉬기');assert.equal(check({...e,ruleExceptions:[rules.items[0].id]},[old()],rules,now).ok,true);assert.equal(check(e,[old()],rules,now).ok,false);});
-test('규칙12 과거는 예외로 통과 못함',()=>assert.equal(check({...e,date:'2020-01-01',ruleExceptions:['base:past']},[],initialRules,now).ok,false));
-test('규칙13 잘못된 날짜는 예외로 통과 못함',()=>assert.equal(check({...e,date:'2026-02-30',ruleExceptions:['base:invalid']},[],initialRules,now).ok,false));
-test('규칙14 주말 제한',()=>assert.equal(check({...e,date:'2026-09-19'},[],r('주말 운동은 확인해줘'),now).ok,false));
-test('규칙15 평일 시간 제한은 주말 제외',()=>assert.equal(check({...e,date:'2026-09-19',time:'21:00'},[],r('평일 운동 오후 8시 이후는 확인해줘'),now).ok,true));
-test('규칙16 종료 시각이 금지 구간에 걸치면 감지',()=>assert.equal(check({...e,time:'19:30'},[],r('운동 오후 8시 이후는 확인해줘'),now).ok,false));
-test('규칙17 제한 구간 바로 전 종료는 허용',()=>assert.equal(check({...e,time:'19:00'},[],r('운동 오후 8시 이후는 확인해줘'),now).ok,true));
-test('규칙18 자정 넘어 제한 감지',()=>{const rules=r('업무 오전 1시 이전은 확인해줘');assert.equal(check({...e,category:'work',time:'23:30'},[],rules,now).ok,false);});
-test('규칙19 비활성 규칙은 무시',()=>{const rules=r('운동 다음 날은 쉬기');rules.items[0].enabled=false;assert.equal(check(e,[old()],rules,now).ok,true);});
-test('규칙20 대안 모두 휴식과 횟수 규칙 준수',()=>{const rules=r('운동 다음 날은 쉬기');const choices=alternatives(e,[old()],rules,now);assert.equal(choices.length,3);choices.forEach(c=>assert.equal(check(c,[old()],rules,now).reasons.length,0));});
-test('규칙21 반복 일정 내부끼리도 횟수 검사',()=>{const plan=planSeries({...e,recurrence:{frequency:'daily',until:'2026-09-20',days:[]}},[],r('운동 주 2회 이하'),[],now);assert.equal(plan.accepted.length,2);assert.equal(plan.conflicts.length,2);});
-test('규칙22 반복 중 건너뛴 회차는 횟수 제외',()=>{const plan=planSeries({...e,recurrence:{frequency:'daily',until:'2026-09-19',days:[]}},[],r('운동 주 2회 이하'),['2026-09-18'],now);assert.equal(plan.accepted.length,2);assert.equal(plan.conflicts.length,0);});
-test('규칙23 준비물 알림 해석',()=>{const rules=r('운동 30분 전 알림 준비물: 운동복과 물');assert.deepEqual(reminderFor(e,rules),{minutes:30,message:'운동복과 물'});});
-test('규칙24 마지막으로 저장한 알림 규칙 우선',()=>{const rules=r('운동 30분 전 알림');rules.items.push(parseRule('운동 1시간 전 알림'));assert.equal(reminderFor(e,rules).minutes,60);});
-test('규칙25 별칭 뜻에서도 대상 일치',()=>assert.equal(matchesRule({...e,title:'종숲',aliasMeaning:'클라이밍'},parseRule('클라이밍 다음 날은 쉬기')),true));
-test('규칙26 자동 등록도 충돌 검사를 우회하지 않음',()=>assert.equal(check(e,[old({date:e.date})],r('운동 바로 등록'),now).ok,false));
-test('규칙27 모호한 오전 오후 거절',()=>assert.throws(()=>parseRule('운동 8시 이후 피하기')));
-test('규칙28 지원 안 하는 규칙 거절',()=>assert.throws(()=>parseRule('비 오는 날만 쉬기')));
-test('규칙29 횟수 음수 거절',()=>assert.throws(()=>validateRule({...parseRule('운동 주 2회 이하'),params:{count:-1}})));
-test('규칙30 손상된 저장 규칙 제외',()=>assert.equal(restoreRules({items:[{type:'unknown'}]}).items.length,0));
-test('규칙31 기존 겹침을 경고로 변경',()=>{const v=check(e,[old({date:e.date})],{...initialRules,actions:{overlap:'warn'}},now);assert.equal(v.ok,true);assert.equal(v.warnings[0].type,'overlap');});
-test('규칙32 추천은 예외와 경고도 피함',()=>{const rules=r('운동 오후 8시 이후는 알려줘');const a=alternatives({...e,time:'21:00',ruleExceptions:[rules.items[0].id]},[],rules,now);a.forEach(c=>{assert.deepEqual(c.ruleExceptions,[]);assert.equal(check(c,[],rules,now).reasons.length,0);});});
+import { check, alternatives, initialRules, restoreRules } from '../../utils/scheduler/engine.js';
+import { parseRule, validateRule, reminderFor, matchesRule } from '../../utils/scheduler/policy.js';
+import { planSeries } from '../../utils/scheduler/recurrence.js';
+const now = Date.parse('2026-09-14T00:00:00+09:00');
+const e = {
+  id: 'new',
+  title: '운동',
+  date: '2026-09-17',
+  time: '18:00',
+  duration: 60,
+  category: 'exercise',
+};
+const r = (text) => ({ ...initialRules, gap: 0, weekendWork: false, items: [parseRule(text)] });
+const old = (p = {}) => ({ ...e, id: 'old', date: '2026-09-16', ...p });
+test('규칙01 다음 날 휴식 위반', () =>
+  assert.equal(check(e, [old()], r('운동 다음 날은 쉬기'), now).ok, false));
+test('규칙02 하루 완전 휴식 후 허용', () =>
+  assert.equal(
+    check({ ...e, date: '2026-09-18' }, [old()], r('운동 다음 날은 쉬기'), now).ok,
+    true,
+  ));
+test('규칙03 미래에 이미 있는 운동 앞날에도 휴식 검사', () =>
+  assert.equal(check(e, [old({ date: '2026-09-18' })], r('운동 다음 날은 쉬기'), now).ok, false));
+test('규칙04 취소된 일정은 휴식 조건에서 제외', () =>
+  assert.equal(check(e, [old({ cancelledAt: 'yes' })], r('운동 다음 날은 쉬기'), now).ok, true));
+test('규칙05 다른 카테고리는 휴식 조건에서 제외', () =>
+  assert.equal(check(e, [old({ category: 'work' })], r('운동 다음 날은 쉬기'), now).ok, true));
+test('규칙06 주간 최대 횟수', () =>
+  assert.equal(check(e, [old()], r('운동 주 1회 이하'), now).ok, false));
+test('규칙07 다음 주 횟수 초기화', () =>
+  assert.equal(check({ ...e, date: '2026-09-21' }, [old()], r('운동 주 1회 이하'), now).ok, true));
+test('규칙08 자신을 수정할 때 횟수 중복 없음', () =>
+  assert.equal(check(e, [e], r('운동 주 1회 이하'), now).ok, true));
+test('규칙09 경고는 등록 허용과 함께 반환', () => {
+  const v = check({ ...e, time: '21:00' }, [], r('운동 오후 8시 이후는 알려줘'), now);
+  assert.equal(v.ok, true);
+  assert.equal(v.warnings.length, 1);
+});
+test('규칙10 확인 규칙은 사용자 확인까지 정지', () =>
+  assert.equal(
+    check({ ...e, time: '21:00' }, [], r('운동 오후 8시 이후는 확인해줘'), now).ok,
+    false,
+  ));
+test('규칙11 이번만 예외는 해당 규칙만 통과', () => {
+  const rules = r('운동 다음 날은 쉬기');
+  assert.equal(check({ ...e, ruleExceptions: [rules.items[0].id] }, [old()], rules, now).ok, true);
+  assert.equal(check(e, [old()], rules, now).ok, false);
+});
+test('규칙12 과거는 예외로 통과 못함', () =>
+  assert.equal(
+    check({ ...e, date: '2020-01-01', ruleExceptions: ['base:past'] }, [], initialRules, now).ok,
+    false,
+  ));
+test('규칙13 잘못된 날짜는 예외로 통과 못함', () =>
+  assert.equal(
+    check({ ...e, date: '2026-02-30', ruleExceptions: ['base:invalid'] }, [], initialRules, now).ok,
+    false,
+  ));
+test('규칙14 주말 제한', () =>
+  assert.equal(check({ ...e, date: '2026-09-19' }, [], r('주말 운동은 확인해줘'), now).ok, false));
+test('규칙15 평일 시간 제한은 주말 제외', () =>
+  assert.equal(
+    check(
+      { ...e, date: '2026-09-19', time: '21:00' },
+      [],
+      r('평일 운동 오후 8시 이후는 확인해줘'),
+      now,
+    ).ok,
+    true,
+  ));
+test('규칙16 종료 시각이 금지 구간에 걸치면 감지', () =>
+  assert.equal(
+    check({ ...e, time: '19:30' }, [], r('운동 오후 8시 이후는 확인해줘'), now).ok,
+    false,
+  ));
+test('규칙17 제한 구간 바로 전 종료는 허용', () =>
+  assert.equal(
+    check({ ...e, time: '19:00' }, [], r('운동 오후 8시 이후는 확인해줘'), now).ok,
+    true,
+  ));
+test('규칙18 자정 넘어 제한 감지', () => {
+  const rules = r('업무 오전 1시 이전은 확인해줘');
+  assert.equal(check({ ...e, category: 'work', time: '23:30' }, [], rules, now).ok, false);
+});
+test('규칙19 비활성 규칙은 무시', () => {
+  const rules = r('운동 다음 날은 쉬기');
+  rules.items[0].enabled = false;
+  assert.equal(check(e, [old()], rules, now).ok, true);
+});
+test('규칙20 대안 모두 휴식과 횟수 규칙 준수', () => {
+  const rules = r('운동 다음 날은 쉬기');
+  const choices = alternatives(e, [old()], rules, now);
+  assert.equal(choices.length, 3);
+  choices.forEach((c) => assert.equal(check(c, [old()], rules, now).reasons.length, 0));
+});
+test('규칙21 반복 일정 내부끼리도 횟수 검사', () => {
+  const plan = planSeries(
+    { ...e, recurrence: { frequency: 'daily', until: '2026-09-20', days: [] } },
+    [],
+    r('운동 주 2회 이하'),
+    [],
+    now,
+  );
+  assert.equal(plan.accepted.length, 2);
+  assert.equal(plan.conflicts.length, 2);
+});
+test('규칙22 반복 중 건너뛴 회차는 횟수 제외', () => {
+  const plan = planSeries(
+    { ...e, recurrence: { frequency: 'daily', until: '2026-09-19', days: [] } },
+    [],
+    r('운동 주 2회 이하'),
+    ['2026-09-18'],
+    now,
+  );
+  assert.equal(plan.accepted.length, 2);
+  assert.equal(plan.conflicts.length, 0);
+});
+test('규칙23 준비물 알림 해석', () => {
+  const rules = r('운동 30분 전 알림 준비물: 운동복과 물');
+  assert.deepEqual(reminderFor(e, rules), { minutes: 30, message: '운동복과 물' });
+});
+test('규칙24 마지막으로 저장한 알림 규칙 우선', () => {
+  const rules = r('운동 30분 전 알림');
+  rules.items.push(parseRule('운동 1시간 전 알림'));
+  assert.equal(reminderFor(e, rules).minutes, 60);
+});
+test('규칙25 별칭 뜻에서도 대상 일치', () =>
+  assert.equal(
+    matchesRule(
+      { ...e, title: '종숲', aliasMeaning: '클라이밍' },
+      parseRule('클라이밍 다음 날은 쉬기'),
+    ),
+    true,
+  ));
+test('규칙26 자동 등록도 충돌 검사를 우회하지 않음', () =>
+  assert.equal(check(e, [old({ date: e.date })], r('운동 바로 등록'), now).ok, false));
+test('규칙27 모호한 오전 오후 거절', () => assert.throws(() => parseRule('운동 8시 이후 피하기')));
+test('규칙28 지원 안 하는 규칙 거절', () => assert.throws(() => parseRule('비 오는 날만 쉬기')));
+test('규칙29 횟수 음수 거절', () =>
+  assert.throws(() => validateRule({ ...parseRule('운동 주 2회 이하'), params: { count: -1 } })));
+test('규칙30 손상된 저장 규칙 제외', () =>
+  assert.equal(restoreRules({ items: [{ type: 'unknown' }] }).items.length, 0));
+test('규칙31 기존 겹침을 경고로 변경', () => {
+  const v = check(
+    e,
+    [old({ date: e.date })],
+    { ...initialRules, actions: { overlap: 'warn' } },
+    now,
+  );
+  assert.equal(v.ok, true);
+  assert.equal(v.warnings[0].type, 'overlap');
+});
+test('규칙32 추천은 예외와 경고도 피함', () => {
+  const rules = r('운동 오후 8시 이후는 알려줘');
+  const a = alternatives(
+    { ...e, time: '21:00', ruleExceptions: [rules.items[0].id] },
+    [],
+    rules,
+    now,
+  );
+  a.forEach((c) => {
+    assert.deepEqual(c.ruleExceptions, []);
+    assert.equal(check(c, [], rules, now).reasons.length, 0);
+  });
+});

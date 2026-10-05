@@ -224,7 +224,7 @@ DTSTART;TZID=Asia/Seoul:20261029T140000
 DTEND;TZID=Asia/Seoul:20261029T160000
 STATUS:CONFIRMED
 END:VEVENT
-END:VCALENDAR`
+END:VCALENDAR`;
 
 // 근무표 엑셀 샘플: 실제 첨부된 "2026년 9월 간호 근무표(62W)" 표에서 강조 표시된
 // 세 사람(팀원 이름과 같음: 길선호/김창민/황수민)의 30일치 행만 옮겨 담았다. 20명
@@ -234,4 +234,4 @@ export const DEMO_EXCEL_CSV = `근무월,2026-09
 직급,이름,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30
 RN,길선호,D,/,E,D,/,/,/,N,N,E,/,N,N,E,/,/,E,D,D,D,N,D,D,/,D,N,E,D,N,D
 RN,김창민,E,D,N,/,N,D,/,/,/,D,D,/,D,E,N,D,/,D,D,D,E,E,E,D,E,D,/,D,/,/
-RN,황수민,E,/,D,E,E,/,N,E,/,D,E,N,/,N,D,N,D,E,D,/,E,D,/,N,/,D,E,E,D,N`
+RN,황수민,E,/,D,E,E,/,N,E,/,D,E,N,/,N,D,N,D,E,D,/,E,D,/,N,/,D,E,E,D,N`;

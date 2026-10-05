@@ -29,6 +29,7 @@
     "@types/react": "~19.2.2",
     "@types/web-push": "^3.6.4",
     "@vercel/node": "^13.0.1",
+    "prettier": "^3.9.9",
     "tsx": "^4.23.13",
     "typescript": "~6.0.3"
   },
@@ -40,6 +41,8 @@
     "test:interpret": "tsx scripts/test-interpret.ts",
     "test": "node --test tests/scheduler/*.test.js && node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx}\"",
     "build": "expo export -p web && node scripts/postexport.mjs"
   },
   "private": true

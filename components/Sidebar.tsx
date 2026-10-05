@@ -6,7 +6,7 @@ import { useGoogleSyncStatus } from '../utils/useGoogleSyncStatus';
 import { AppLogo } from './AppLogo';
 import { GlossyBox } from './GlossyBox';
 import { LegalLink } from './LegalLink';
-import {useStoredEvents} from '../utils/useStoredEvents';
+import { useStoredEvents } from '../utils/useStoredEvents';
 
 // 구글 OAuth 검수는 개인정보처리방침이 서비스와 같은 도메인에 있어야 해서(구글 사이트 도구 등
 // 소유권을 인증할 수 없는 외부 플랫폼은 거절됨) public/privacy.html, public/terms.html을
@@ -51,7 +51,7 @@ export function Sidebar({
   compact: boolean;
 }) {
   const googleStatus = useGoogleSyncStatus();
-  const alertCount=useStoredEvents().filter(e=>!e.cancelledAt).length;
+  const alertCount = useStoredEvents().filter((e) => !e.cancelledAt).length;
 
   const handleDisconnect = async () => {
     await disconnectGoogle();
@@ -73,7 +73,9 @@ export function Sidebar({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={googleStatus.connected ? 'Google 연동 해제' : 'Google 캘린더 연동'}
-            onPress={() => void (googleStatus.connected ? handleDisconnect() : startGoogleConnect())}
+            onPress={() =>
+              void (googleStatus.connected ? handleDisconnect() : startGoogleConnect())
+            }
             style={styles.mobileGoogleChip}
           >
             <View style={styles.mobileGoogleIcon}>
@@ -143,24 +145,31 @@ export function Sidebar({
                     <CalendarNavIcon color={selected ? colors.white : colors.warmGray} />
                   </View>
                 ) : (
-                  <Text style={[styles.navIcon, selected && styles.navTextActive]}>{item.icon}</Text>
+                  <Text style={[styles.navIcon, selected && styles.navTextActive]}>
+                    {item.icon}
+                  </Text>
                 )}
                 {!compact && (
-                  <Text style={[styles.navLabel, selected && styles.navTextActive]}>{item.label}{item.key==='alerts'?` ${alertCount}`:''}</Text>
+                  <Text style={[styles.navLabel, selected && styles.navTextActive]}>
+                    {item.label}
+                    {item.key === 'alerts' ? ` ${alertCount}` : ''}
+                  </Text>
                 )}
               </>
             );
             return (
-              <Pressable accessibilityRole="button" accessibilityLabel={item.label} key={item.key} onPress={() => onSelect(item.key)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+                key={item.key}
+                onPress={() => onSelect(item.key)}
+              >
                 {selected ? (
                   <GlossyBox
                     colors={['#cf8f71', '#b56d52']}
                     shadowColor="#ac7041"
                     borderRadius={12}
-                    contentStyle={[
-                      styles.navItemContent,
-                      compact && styles.navItemContentCompact,
-                    ]}
+                    contentStyle={[styles.navItemContent, compact && styles.navItemContentCompact]}
                   >
                     {content}
                   </GlossyBox>

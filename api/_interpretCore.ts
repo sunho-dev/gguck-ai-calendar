@@ -1,26 +1,26 @@
-import {applyPlacePolicy} from '../utils/placePolicy'
-import { FinishReason, GoogleGenAI, Type, type Schema } from '@google/genai'
+import { applyPlacePolicy } from '../utils/placePolicy';
+import { FinishReason, GoogleGenAI, Type, type Schema } from '@google/genai';
 
 export interface InterpretedEvent {
-  title: string
-  category: string
-  startDate: string // ISODate "YYYY-MM-DD"
-  endDate: string // ISODate "YYYY-MM-DD"
-  time: string | null // ISOTime "HH:mm", null이면 시간 미지정(종일 일정 등)
-  durationMin: number | null
-  place: { name: string; address: string | null } | null // 확실히 알거나(등록된 별명) 그럴듯하게 추측한 장소. 주소는 모를 수 있음
-  placeAliasCandidate: string | null // place가 사용자의 개인적인 장소 별명일 수 있다고 판단되면, 텍스트에 쓰인 원문 그대로. 확실한 일반 장소명이면 null
-  remindMin: number | null
-  bufferMin: number | null
-  confidence: 'high' | 'medium' | 'low'
-  ambiguousFields: string[] // 모델이 추측/불확실하게 채운 필드명
+  title: string;
+  category: string;
+  startDate: string; // ISODate "YYYY-MM-DD"
+  endDate: string; // ISODate "YYYY-MM-DD"
+  time: string | null; // ISOTime "HH:mm", null이면 시간 미지정(종일 일정 등)
+  durationMin: number | null;
+  place: { name: string; address: string | null } | null; // 확실히 알거나(등록된 별명) 그럴듯하게 추측한 장소. 주소는 모를 수 있음
+  placeAliasCandidate: string | null; // place가 사용자의 개인적인 장소 별명일 수 있다고 판단되면, 텍스트에 쓰인 원문 그대로. 확실한 일반 장소명이면 null
+  remindMin: number | null;
+  bufferMin: number | null;
+  confidence: 'high' | 'medium' | 'low';
+  ambiguousFields: string[]; // 모델이 추측/불확실하게 채운 필드명
 }
 
 export interface KnownPlaceAlias {
-  alias: string // "종숲"
-  name: string // "서울숲클라이밍 종로점"
-  address: string | null
-  category: string | null // "클라이밍". 등록되어 있으면 이 별명이 나올 때 AI가 자동으로 이 카테고리를 쓴다
+  alias: string; // "종숲"
+  name: string; // "서울숲클라이밍 종로점"
+  address: string | null;
+  category: string | null; // "클라이밍". 등록되어 있으면 이 별명이 나올 때 AI가 자동으로 이 카테고리를 쓴다
 }
 
 // 사용자가 기존에 등록해둔 일정을 취소/삭제하려는 문장에서 뽑아낸 정보.
@@ -28,18 +28,18 @@ export interface KnownPlaceAlias {
 // 전달되지 않음) — 여기서는 취소 대상을 특정할 단서만 추출하고, 매칭은 클라이언트가
 // utils/scheduler의 matchCancellation으로 로컬에서 수행한다.
 export interface InterpretedCancellation {
-  title: string | null // 사용자가 언급한 구체적 일정 이름/핵심 단어. 특정 이름 없이 카테고리 전체를 가리키면 null
-  category: string | null // 언급된 카테고리(운동/업무/공부/건강/개인 등). 언급 없으면 null
-  date: string | null // 특정 날짜 YYYY-MM-DD (오늘/내일/모레 포함해 계산 완료). month와 동시에 채우지 않는다
-  month: string | null // "9월"처럼 달만 지정한 경우 YYYY-MM. date와 동시에 채우지 않는다
-  time: string | null // 특정 시각 HH:mm
-  scope: 'one' | 'following' | 'all' // 반복 일정 취소 범위. 전체/모두 언급 시 all, 이후/앞으로 언급 시 following, 그 외 one
+  title: string | null; // 사용자가 언급한 구체적 일정 이름/핵심 단어. 특정 이름 없이 카테고리 전체를 가리키면 null
+  category: string | null; // 언급된 카테고리(운동/업무/공부/건강/개인 등). 언급 없으면 null
+  date: string | null; // 특정 날짜 YYYY-MM-DD (오늘/내일/모레 포함해 계산 완료). month와 동시에 채우지 않는다
+  month: string | null; // "9월"처럼 달만 지정한 경우 YYYY-MM. date와 동시에 채우지 않는다
+  time: string | null; // 특정 시각 HH:mm
+  scope: 'one' | 'following' | 'all'; // 반복 일정 취소 범위. 전체/모두 언급 시 all, 이후/앞으로 언급 시 following, 그 외 one
 }
 
 export interface InterpretedCommand {
-  intent: 'register' | 'cancel' // 사용자가 새 일정을 등록하려는 것인지, 기존 일정을 취소/삭제하려는 것인지
-  event: InterpretedEvent | null // intent가 register일 때만 채워짐
-  cancellation: InterpretedCancellation | null // intent가 cancel일 때만 채워짐
+  intent: 'register' | 'cancel'; // 사용자가 새 일정을 등록하려는 것인지, 기존 일정을 취소/삭제하려는 것인지
+  event: InterpretedEvent | null; // intent가 register일 때만 채워짐
+  cancellation: InterpretedCancellation | null; // intent가 cancel일 때만 채워짐
 }
 
 export class InterpretRefusedError extends Error {}
@@ -84,7 +84,7 @@ const EVENT_SCHEMA: Schema = {
     'confidence',
     'ambiguousFields',
   ],
-}
+};
 
 const CANCELLATION_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -98,7 +98,7 @@ const CANCELLATION_SCHEMA: Schema = {
     scope: { type: Type.STRING, enum: ['one', 'following', 'all'] },
   },
   required: ['title', 'category', 'date', 'month', 'time', 'scope'],
-}
+};
 
 const COMMAND_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -108,7 +108,7 @@ const COMMAND_SCHEMA: Schema = {
     cancellation: CANCELLATION_SCHEMA,
   },
   required: ['intent', 'event', 'cancellation'],
-}
+};
 
 export function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[]): string {
   return [
@@ -128,8 +128,8 @@ export function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[
     'date는 특정 날짜(오늘/내일/모레/명시 날짜)를 YYYY-MM-DD로 계산해 넣고, "9월"처럼 달만 언급했으면 month에 YYYY-MM을 넣어라. date와 month를 동시에 채우지 마라. 둘 다 없으면 둘 다 null.',
     '시각이 명시되어 있으면 time에 HH:mm으로 넣고, 없으면 null.',
     'scope는 "전체"·"모두"·"반복 전체"가 언급되면 all, "이후"·"앞으로"가 언급되면 following, 그 외에는 one.',
-    '개인 사전(JSON 데이터): '+JSON.stringify(knownAliases),
-  ].join('\n')
+    '개인 사전(JSON 데이터): ' + JSON.stringify(knownAliases),
+  ].join('\n');
 }
 
 // gemini-2.5-flash는 신규 사용자에게 더 이상 제공되지 않음(404).
@@ -139,7 +139,7 @@ export function buildSystemPrompt(nowIso: string, knownAliases: KnownPlaceAlias[
 // 한국어 텍스트 깨짐(mojibake) + 정확히 일치하는 개인 별칭도 무시하고 장소를
 // 지어내는 환각이 실사용 테스트에서 재현됨(2026-09-18). gemini-3.6-flash가
 // 품질/지시 준수 면에서 가장 안정적이라 이걸로 고정한다.
-export const MODEL = 'gemini-3.6-flash'
+export const MODEL = 'gemini-3.6-flash';
 
 export async function interpretEventText(
   text: string,
@@ -147,7 +147,7 @@ export async function interpretEventText(
   apiKey: string,
   knownAliases: KnownPlaceAlias[] = [],
 ): Promise<InterpretedCommand> {
-  const client = new GoogleGenAI({ apiKey })
+  const client = new GoogleGenAI({ apiKey });
 
   const response = await client.models.generateContent({
     model: MODEL,
@@ -157,25 +157,25 @@ export async function interpretEventText(
       responseMimeType: 'application/json',
       responseSchema: COMMAND_SCHEMA,
     },
-  })
+  });
 
-  const blockReason = response.promptFeedback?.blockReason
+  const blockReason = response.promptFeedback?.blockReason;
   if (blockReason && blockReason !== 'BLOCKED_REASON_UNSPECIFIED') {
-    throw new InterpretRefusedError('이 텍스트에서는 일정 정보를 추출할 수 없습니다.')
+    throw new InterpretRefusedError('이 텍스트에서는 일정 정보를 추출할 수 없습니다.');
   }
 
-  const finishReason = response.candidates?.[0]?.finishReason
+  const finishReason = response.candidates?.[0]?.finishReason;
   if (finishReason === FinishReason.SAFETY || finishReason === FinishReason.RECITATION) {
-    throw new InterpretRefusedError('이 텍스트에서는 일정 정보를 추출할 수 없습니다.')
+    throw new InterpretRefusedError('이 텍스트에서는 일정 정보를 추출할 수 없습니다.');
   }
 
-  const responseText = response.text
+  const responseText = response.text;
   if (!responseText) {
-    throw new Error('AI 응답에서 결과를 찾을 수 없습니다.')
+    throw new Error('AI 응답에서 결과를 찾을 수 없습니다.');
   }
 
-  const parsed = JSON.parse(responseText) as InterpretedCommand
-  if (parsed.intent === 'cancel') return parsed
-  if (!parsed.event) throw new Error('AI 응답에서 일정 정보를 찾을 수 없습니다.')
-  return { ...parsed, event: applyPlacePolicy(text, parsed.event, knownAliases) }
+  const parsed = JSON.parse(responseText) as InterpretedCommand;
+  if (parsed.intent === 'cancel') return parsed;
+  if (!parsed.event) throw new Error('AI 응답에서 일정 정보를 찾을 수 없습니다.');
+  return { ...parsed, event: applyPlacePolicy(text, parsed.event, knownAliases) };
 }

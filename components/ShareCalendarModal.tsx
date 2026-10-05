@@ -132,7 +132,9 @@ export function ShareCalendarModal({
         }
       } else {
         await downloadBlob(blob);
-        setNotice(`이 브라우저에서는 ${target.label}로 바로 연결할 수 없어서 이미지를 다운로드했어요. 다운로드된 이미지를 ${target.label}에 직접 첨부해 보내주세요.`);
+        setNotice(
+          `이 브라우저에서는 ${target.label}로 바로 연결할 수 없어서 이미지를 다운로드했어요. 다운로드된 이미지를 ${target.label}에 직접 첨부해 보내주세요.`,
+        );
       }
     } finally {
       setBusy(null);
@@ -149,14 +151,18 @@ export function ShareCalendarModal({
               <Text style={styles.closeX}>×</Text>
             </Pressable>
           </View>
-          <Text style={styles.subheading}>가져오기로 등록한 근무 일정만 공유돼요. 직접 등록한 개인 일정은 포함되지 않아요.</Text>
+          <Text style={styles.subheading}>
+            가져오기로 등록한 근무 일정만 공유돼요. 직접 등록한 개인 일정은 포함되지 않아요.
+          </Text>
 
           <View ref={captureRef} style={styles.card} collapsable={false}>
             <Text style={styles.cardBrand}>꾹</Text>
             <Text style={styles.cardMonth}>{formatMonthLabel(viewedMonth)}</Text>
             <View style={styles.weekdayRow}>
               {WEEKDAY_HEADERS.map((d) => (
-                <Text key={d} style={styles.weekdayText}>{d}</Text>
+                <Text key={d} style={styles.weekdayText}>
+                  {d}
+                </Text>
               ))}
             </View>
             <View style={styles.grid}>
@@ -165,7 +171,9 @@ export function ShareCalendarModal({
                 const dayColors = colorsOn(date);
                 return (
                   <View key={date} style={styles.cell}>
-                    <Text style={[styles.cellText, !inMonth && styles.cellTextOutside]}>{dayOfMonth(date)}</Text>
+                    <Text style={[styles.cellText, !inMonth && styles.cellTextOutside]}>
+                      {dayOfMonth(date)}
+                    </Text>
                     {dayColors.length > 0 && (
                       <View style={styles.cellBlocks}>
                         {dayColors.slice(0, 3).map((c, i) => (
@@ -181,7 +189,12 @@ export function ShareCalendarModal({
               <View style={styles.legend}>
                 {labels.map((label) => (
                   <View key={label} style={styles.legendItem}>
-                    <View style={[styles.legendSwatch, { backgroundColor: shiftColors[label] ?? colors.warmGray }]} />
+                    <View
+                      style={[
+                        styles.legendSwatch,
+                        { backgroundColor: shiftColors[label] ?? colors.warmGray },
+                      ]}
+                    />
                     <Text style={styles.legendText}>{label}</Text>
                   </View>
                 ))}
@@ -201,17 +214,31 @@ export function ShareCalendarModal({
                 disabled={busy !== null}
                 onPress={() => void handleAppShare(target)}
               >
-                <View style={[styles.shareIcon, styles.shareIconCenter, { backgroundColor: target.color }]}>
+                <View
+                  style={[
+                    styles.shareIcon,
+                    styles.shareIconCenter,
+                    { backgroundColor: target.color },
+                  ]}
+                >
                   <target.Glyph />
                 </View>
-                <Text style={styles.shareLabel}>{busy === target.key ? '준비 중…' : target.label}</Text>
+                <Text style={styles.shareLabel}>
+                  {busy === target.key ? '준비 중…' : target.label}
+                </Text>
               </Pressable>
             ))}
-            <Pressable style={styles.shareButton} disabled={busy !== null} onPress={() => void handleDownload()}>
+            <Pressable
+              style={styles.shareButton}
+              disabled={busy !== null}
+              onPress={() => void handleDownload()}
+            >
               <View style={[styles.shareIcon, styles.downloadIcon]}>
                 <Text style={styles.downloadIconText}>↓</Text>
               </View>
-              <Text style={styles.shareLabel}>{busy === 'download' ? '저장 중…' : '이미지 다운로드'}</Text>
+              <Text style={styles.shareLabel}>
+                {busy === 'download' ? '저장 중…' : '이미지 다운로드'}
+              </Text>
             </Pressable>
           </View>
 

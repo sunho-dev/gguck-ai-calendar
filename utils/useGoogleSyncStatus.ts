@@ -1,21 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
 
-import { getGoogleSyncStatus, type GoogleSyncStatus } from './googleSync'
+import { getGoogleSyncStatus, type GoogleSyncStatus } from './googleSync';
 
-const INITIAL: GoogleSyncStatus = { connected: false, email: null }
+const INITIAL: GoogleSyncStatus = { connected: false, email: null };
 
 export function useGoogleSyncStatus(): GoogleSyncStatus {
-  const [status, setStatus] = useState<GoogleSyncStatus>(INITIAL)
+  const [status, setStatus] = useState<GoogleSyncStatus>(INITIAL);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     getGoogleSyncStatus().then((result) => {
-      if (!cancelled) setStatus(result)
-    })
+      if (!cancelled) setStatus(result);
+    });
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
-  return status
+  return status;
 }

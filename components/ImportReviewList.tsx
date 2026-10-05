@@ -59,10 +59,14 @@ export function ImportReviewList({
                 {!isExcluded && <Text style={styles.checkboxMark}>✓</Text>}
               </View>
               <View style={styles.rowBody}>
-                <Text style={[styles.rowTitle, isExcluded && styles.rowTextExcluded]}>{draft.title}</Text>
+                <Text style={[styles.rowTitle, isExcluded && styles.rowTextExcluded]}>
+                  {draft.title}
+                </Text>
                 <Text style={[styles.rowMeta, isExcluded && styles.rowTextExcluded]}>
-                  {draft.endDate && draft.endDate !== draft.startDate ? `${draft.startDate} ~ ${draft.endDate}` : draft.startDate} {draft.time} · {draft.durationMin}분
-                  {draft.place ? ` · ${draft.place.name}` : ''}
+                  {draft.endDate && draft.endDate !== draft.startDate
+                    ? `${draft.startDate} ~ ${draft.endDate}`
+                    : draft.startDate}{' '}
+                  {draft.time} · {draft.durationMin}분{draft.place ? ` · ${draft.place.name}` : ''}
                 </Text>
               </View>
             </Pressable>

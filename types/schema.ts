@@ -1,51 +1,50 @@
-export type ISODate = string // "2026-09-17"
-export type ISOTime = string // "19:00"
-export type ISODateTime = string // "2026-09-17T19:00:00+09:00"
+export type ISODate = string; // "2026-09-17"
+export type ISOTime = string; // "19:00"
+export type ISODateTime = string; // "2026-09-17T19:00:00+09:00"
 
-
-export type BaseCategory = 'exercise' | 'work' | 'personal' | 'study' | 'health'
+export type BaseCategory = 'exercise' | 'work' | 'personal' | 'study' | 'health';
 
 /**
  * 사용자가 직접 만드는 생활 카테고리. Event.category에는 이 id가 저장된다.
  * baseCategory는 기존 규칙 엔진/AI 분류와 연결하기 위한 내부 분류라 화면에서는 강조하지 않는다.
  */
 export interface UserCategory {
-  id: string
-  label: string
+  id: string;
+  label: string;
   /** @deprecated 기존 저장 데이터 호환용. 화면에서는 사용하지 않습니다. */
-  emoji?: string
-  color: string
-  baseCategory: BaseCategory
-  defaultReminderMin: number
-  notificationEnabled: boolean
-  keywords: string[]
-  createdAt: ISODateTime
+  emoji?: string;
+  color: string;
+  baseCategory: BaseCategory;
+  defaultReminderMin: number;
+  notificationEnabled: boolean;
+  keywords: string[];
+  createdAt: ISODateTime;
 }
 
 export interface Event {
-  id: string
-  userId: string
-  title: string
-  category: string
-  startDate: ISODate
-  endDate: ISODate // 기간 일정 지원 (단일 일정이면 startDate와 동일)
-  time: ISOTime
-  durationMin: number
-  place: { name: string; address: string | null; lat: number; lng: number } | null // 장소 없는 일정도, 주소 모르는 장소도 있음
-  remindMin: number
-  notificationEnabled?: boolean // 개별 일정 알림 ON/OFF. 기존 일정은 undefined를 ON으로 취급
-  bufferMin: number
-  createdFrom: 'share' | 'paste' | 'text' | 'voice'
-  sharedWith: string[]
-  googleEventId?: string // 구글 캘린더 자동 동기화로 만들어진 이벤트일 때만 존재
-  seriesId?: string
-  recurrence?: import('../utils/scheduler').Recurrence | null
-  aliasTerm?: string
-  aliasMeaning?: string
-  cancelledAt?: string
-  ruleExceptions?: string[]
-  reminderMessage?: string
-  shiftType?: string // 가져온 일정 제목에서 뽑아낸 근무 유형 라벨(예: "주간", "야간") — 색 표시용, 규칙 엔진의 category와는 별개
+  id: string;
+  userId: string;
+  title: string;
+  category: string;
+  startDate: ISODate;
+  endDate: ISODate; // 기간 일정 지원 (단일 일정이면 startDate와 동일)
+  time: ISOTime;
+  durationMin: number;
+  place: { name: string; address: string | null; lat: number; lng: number } | null; // 장소 없는 일정도, 주소 모르는 장소도 있음
+  remindMin: number;
+  notificationEnabled?: boolean; // 개별 일정 알림 ON/OFF. 기존 일정은 undefined를 ON으로 취급
+  bufferMin: number;
+  createdFrom: 'share' | 'paste' | 'text' | 'voice';
+  sharedWith: string[];
+  googleEventId?: string; // 구글 캘린더 자동 동기화로 만들어진 이벤트일 때만 존재
+  seriesId?: string;
+  recurrence?: import('../utils/scheduler').Recurrence | null;
+  aliasTerm?: string;
+  aliasMeaning?: string;
+  cancelledAt?: string;
+  ruleExceptions?: string[];
+  reminderMessage?: string;
+  shiftType?: string; // 가져온 일정 제목에서 뽑아낸 근무 유형 라벨(예: "주간", "야간") — 색 표시용, 규칙 엔진의 category와는 별개
 }
 
 /**
@@ -53,30 +52,30 @@ export interface Event {
  * 여기서는 다른 엔티티들이 참조할 수 있는 최소 뼈대만 정의한다.
  */
 export interface Rule {
-  id: string
-  userId: string
-  text: string // 원문 보존: 사용자에게 자기 말로 보여주기 + 오역 시 재해석 위해
-  kind: 'check' | 'auto' | 'trigger'
-  type: string // 확정되면 RuleType 유니온으로 좁힐 예정 (김창민)
-  params: Record<string, unknown> // 확정되면 type별 params 유니온으로 좁힐 예정 (김창민)
-  severity: 'block' | 'warn' | 'auto'
-  enabled: boolean
+  id: string;
+  userId: string;
+  text: string; // 원문 보존: 사용자에게 자기 말로 보여주기 + 오역 시 재해석 위해
+  kind: 'check' | 'auto' | 'trigger';
+  type: string; // 확정되면 RuleType 유니온으로 좁힐 예정 (김창민)
+  params: Record<string, unknown>; // 확정되면 type별 params 유니온으로 좁힐 예정 (김창민)
+  severity: 'block' | 'warn' | 'auto';
+  enabled: boolean;
 }
 
 export interface ShiftCode {
-  userId: string
-  code: string // "D" | "E" | "N" 등, 사용자가 자유롭게 정의
-  label: string
-  start: ISOTime
-  end: ISOTime
-  crossesMidnight: boolean
+  userId: string;
+  code: string; // "D" | "E" | "N" 등, 사용자가 자유롭게 정의
+  label: string;
+  start: ISOTime;
+  end: ISOTime;
+  crossesMidnight: boolean;
 }
 
 export interface ShiftAssignment {
-  userId: string
-  date: ISODate
-  code: string
-  source: 'photo' | 'manual'
+  userId: string;
+  date: ISODate;
+  code: string;
+  source: 'photo' | 'manual';
 }
 
 /**
@@ -84,28 +83,28 @@ export interface ShiftAssignment {
  * "AI 해석 API"가 모르는 장소를 만나면 사용자에게 확인받아 여기에 쌓인다.
  */
 export interface PlaceAlias {
-  userId: string
-  alias: string // 사용자가 쓰는 원문 표현, 예: "종숲"
-  name: string // 실제 장소명, 예: "서울숲클라이밍 종로점"
-  address: string | null
-  category: string | null // 예: "클라이밍". 함께 등록해두면 다음부터 AI가 이 별명이 나왔을 때 자동으로 이 카테고리를 쓴다
-  createdAt: ISODateTime
+  userId: string;
+  alias: string; // 사용자가 쓰는 원문 표현, 예: "종숲"
+  name: string; // 실제 장소명, 예: "서울숲클라이밍 종로점"
+  address: string | null;
+  category: string | null; // 예: "클라이밍". 함께 등록해두면 다음부터 AI가 이 별명이 나왔을 때 자동으로 이 카테고리를 쓴다
+  createdAt: ISODateTime;
 }
 
 export interface Reminder {
-  id: string
-  eventId: string
-  fireAt: ISODateTime
-  sent: boolean
+  id: string;
+  eventId: string;
+  fireAt: ISODateTime;
+  sent: boolean;
 }
 
 export interface Share {
-  token: string
-  ownerId: string
-  rangeStart: ISODate
-  rangeEnd: ISODate
-  expiresAt: ISODateTime
-  scope: 'freeBusy' // 제목·장소는 절대 포함하지 않음
+  token: string;
+  ownerId: string;
+  rangeStart: ISODate;
+  rangeEnd: ISODate;
+  expiresAt: ISODateTime;
+  scope: 'freeBusy'; // 제목·장소는 절대 포함하지 않음
 }
 
 /**
@@ -114,9 +113,9 @@ export interface Share {
  * null이어도 앱의 모든 기능이 정상 동작해야 한다 (구글 연동은 항상 선택 사항).
  */
 export interface User {
-  id: string
-  createdAt: ISODateTime
-  googleAccount: GoogleAccount | null
+  id: string;
+  createdAt: ISODateTime;
+  googleAccount: GoogleAccount | null;
 }
 
 /**
@@ -126,15 +125,15 @@ export interface User {
  * accessToken/refreshToken은 서버에만 저장하고 클라이언트로 내려주지 않는다.
  */
 export interface GoogleAccount {
-  userId: string
-  googleUserId: string
-  email: string
-  accessToken: string
-  refreshToken: string
-  expiresAt: ISODateTime
-  scope: 'https://www.googleapis.com/auth/calendar.events'
-  connectedCalendarId: string // 기본값 "primary"
-  syncEnabled: boolean
-  connectedAt: ISODateTime
-  lastSyncedAt: ISODateTime | null
+  userId: string;
+  googleUserId: string;
+  email: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: ISODateTime;
+  scope: 'https://www.googleapis.com/auth/calendar.events';
+  connectedCalendarId: string; // 기본값 "primary"
+  syncEnabled: boolean;
+  connectedAt: ISODateTime;
+  lastSyncedAt: ISODateTime | null;
 }

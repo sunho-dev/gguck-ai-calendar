@@ -1,0 +1,7 @@
+node_modules
+dist
+.expo
+gguck-complete
+public/*.html
+*.patch
+package-lock.json

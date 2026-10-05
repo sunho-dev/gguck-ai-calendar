@@ -10,9 +10,20 @@ const LIST_WIDTH = 130;
 // Web에서 겹치는 View들의 stacking이 기대한 대로 안 됨). Modal은 화면 전체를 덮는 별도
 // 레이어에 그려져서 항상 맨 위에, 잘림 없이 보인다 — 대신 트리거 버튼의 화면상 위치를
 // 직접 측정해서(measureInWindow) 그 자리에 옵션 목록을 띄워준다.
-export function ColorDropdown({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+export function ColorDropdown({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (hex: string) => void;
+}) {
   const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [anchor, setAnchor] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const triggerRef = useRef<View>(null);
   const selected = shiftColorPalette.find((c) => c.value === value) ?? shiftColorPalette[0];
 

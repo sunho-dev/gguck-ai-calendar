@@ -12,7 +12,7 @@ import { CalendarScreen } from './screens/CalendarScreen';
 import { CategoriesScreen } from './screens/CategoriesScreen';
 import { RulesScreen } from './screens/RulesScreen';
 import { AlertsScreen } from './screens/AlertsScreen';
-import {ReminderSync} from './components/ReminderSync';
+import { ReminderSync } from './components/ReminderSync';
 
 // 안드로이드 공유 시트(Web Share Target)로 "/share-target.html?title=...&text=...&url=..."
 // 형태로 열렸을 때, 카톡 등에서 공유한 텍스트를 꺼내온다. text가 비어있으면 title로 대체.
@@ -53,13 +53,30 @@ export default function App() {
           {!mobile && <Sidebar active={activeNav} onSelect={setActiveNav} compact={false} />}
           <View style={styles.main}>
             {activeNav === 'calendar' ? (
-              <CalendarScreen onCompose={text=>{setAssistantText(text);setActiveNav('assistant');}} onCategories={()=>setActiveNav('categories')} />
+              <CalendarScreen
+                onCompose={(text) => {
+                  setAssistantText(text);
+                  setActiveNav('assistant');
+                }}
+                onCategories={() => setActiveNav('categories')}
+              />
             ) : activeNav === 'categories' ? (
-              <CategoriesScreen onCalendar={()=>setActiveNav('calendar')} />
+              <CategoriesScreen onCalendar={() => setActiveNav('calendar')} />
             ) : activeNav === 'assistant' ? (
-              <AssistantScreen initialText={assistantText} autoSubmit={autoSubmit} onAutoSubmitted={()=>{setAutoSubmit(false);setAssistantText('');}} onRules={()=>setActiveNav('rules')} onCalendar={()=>setActiveNav('calendar')} />
+              <AssistantScreen
+                initialText={assistantText}
+                autoSubmit={autoSubmit}
+                onAutoSubmitted={() => {
+                  setAutoSubmit(false);
+                  setAssistantText('');
+                }}
+                onRules={() => setActiveNav('rules')}
+                onCalendar={() => setActiveNav('calendar')}
+              />
+            ) : activeNav === 'rules' ? (
+              <RulesScreen />
             ) : (
-              activeNav==='rules'?<RulesScreen />:<AlertsScreen onCompose={()=>setActiveNav('assistant')} />
+              <AlertsScreen onCompose={() => setActiveNav('assistant')} />
             )}
           </View>
           {mobile && <Sidebar active={activeNav} onSelect={setActiveNav} compact />}
