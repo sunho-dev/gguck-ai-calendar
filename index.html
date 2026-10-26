@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="꾹(gguck) — 카톡 말투로 등록하는 AI 캘린더 포트폴리오">
+<title>꾹 프로젝트 포트폴리오</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 단일 칼럼 케이스 스터디. 히어로는 "카톡 문장 → 일정 카드" 변환을 그대로 보여주고, 본문은 설계 → 트러블슈팅 → AI 협업 순서 */
+:root {
+  --bg: #F8F1E9;          /* 앱 cream */
+  --surface: #FFFDFA;
+  --line: #E7D8C8;        /* 앱 lightBeige */
+  --fg: #4A3F38;          /* 앱 textDark */
+  --muted: #88786E;       /* 앱 warmGray */
+  --accent: #C56F5D;      /* 앱 terracotta */
+  --accent-soft: #F3DED6;
+  --bubble: #FEE500;      /* 카톡 말풍선 */
+  --bubble-fg: #3A2E00;
+  --ok: #5E8C6A;
+  --ok-soft: #E2EEE4;
+  --code-bg: #F1E7DC;
+  --display: "Gothic A1", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --body: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1E1A17; --surface: #282320; --line: #3D3530; --fg: #EFE6DD; --muted: #A9998D;
+    --accent: #E08B77; --accent-soft: #3B2A24; --bubble: #E6CF2E; --bubble-fg: #2A2200;
+    --ok: #8DBB98; --ok-soft: #22302A; --code-bg: #2F2925; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1E1A17; --surface: #282320; --line: #3D3530; --fg: #EFE6DD; --muted: #A9998D;
+  --accent: #E08B77; --accent-soft: #3B2A24; --bubble: #E6CF2E; --bubble-fg: #2A2200;
+  --ok: #8DBB98; --ok-soft: #22302A; --code-bg: #2F2925; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--body); font-size: 16px; line-height: 1.75;
+  padding: 0 20px; word-break: keep-all; overflow-wrap: break-word;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding-block: 56px 96px; display: grid; gap: 72px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.3; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.6rem; font-weight: 800; }
+h3 { font-size: 1.12rem; font-weight: 700; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
+.eyebrow { font-family: var(--mono); font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+section { display: grid; gap: 22px; }
+.lead { color: var(--muted); }
+
+/* Hero */
+.hero { display: grid; gap: 28px; }
+.hero h1 { font-size: clamp(2.6rem, 8vw, 4rem); font-weight: 800; letter-spacing: -.02em; }
+.hero h1 span { color: var(--accent); }
+.hero .tagline { font-size: 1.2rem; font-family: var(--display); font-weight: 700; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .9rem; color: var(--muted); }
+.meta b { color: var(--fg); font-weight: 500; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 999px; font-weight: 500; font-size: .95rem; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.demo { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
+.chat { display: grid; gap: 8px; justify-items: end; min-width: 0; }
+.bubble { background: var(--bubble); color: var(--bubble-fg); padding: 9px 14px; border-radius: 16px 4px 16px 16px; font-size: .95rem; max-width: 100%; }
+.who { font-size: .75rem; color: var(--muted); }
+.arrow { font-family: var(--mono); color: var(--muted); font-size: .8rem; text-align: center; line-height: 1.3; }
+.arrow i { display: block; font-style: normal; font-size: 1.4rem; color: var(--accent); }
+.event { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px 12px 12px 6px; padding: 12px 14px; display: grid; gap: 2px; min-width: 0; font-size: .9rem; }
+.event .t { font-weight: 700; font-size: 1rem; }
+.event dl { margin: 6px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.event dt { color: var(--muted); font-family: var(--mono); font-size: .75rem; padding-top: 3px; }
+.event dd { margin: 0; }
+
+.demo { grid-template-columns: minmax(0, 1.35fr) auto minmax(0, 1fr); }
+.demo .chat { justify-items: stretch; gap: 6px; }
+.demo .chat .who { justify-self: center; margin-bottom: 2px; }
+.msg { display: grid; gap: 2px; justify-items: start; }
+.msg.me { justify-items: end; }
+.msg .name { font-size: .72rem; color: var(--muted); padding-left: 4px; }
+.bubble.other { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 4px 16px 16px 16px; }
+.bubble mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 2px; }
+.demo-note { font-size: .78rem; color: var(--muted); margin-top: -18px; }
+.examples { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.examples li { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: .88rem; }
+.examples .in { color: var(--fg); }
+.examples .to { color: var(--accent); font-family: var(--mono); }
+.examples .out { color: var(--muted); font-family: var(--mono); font-size: .8rem; }
+@media (max-width: 640px) { .examples li { grid-template-columns: 1fr; gap: 2px; } .examples .to { display: none; } }
+.shot { aspect-ratio: 16 / 9; max-width: 100%; border: 2px dashed var(--line); border-radius: 14px; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: .9rem; padding: 16px; background: var(--surface); }
+.shot.tall { aspect-ratio: 4 / 3; }
+
+/* 역할 */
+.role { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.role-col { padding: 20px; border-radius: 14px; display: grid; gap: 10px; align-content: start; }
+.role-col.mine { background: var(--surface); border: 1.5px solid var(--accent); }
+.role-col.team { border: 1px solid var(--line); }
+.role-col h3 { font-size: 1rem; }
+.role-col ul { margin: 0; padding-left: 1.1em; display: grid; gap: 4px; font-size: .94rem; }
+.role-col.team ul { color: var(--muted); }
+.stats { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: .9rem; color: var(--muted); }
+.stats b { font-family: var(--display); font-size: 1.5rem; color: var(--fg); font-variant-numeric: tabular-nums; margin-right: 4px; }
+
+/* 설계 결정 */
+.decisions { display: grid; gap: 18px; }
+.decision { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr); gap: 6px 14px; }
+.decision .n { font-family: var(--mono); color: var(--accent); font-weight: 500; padding-top: 2px; }
+.decision > div { display: grid; gap: 6px; }
+.flow { overflow-x: auto; }
+.flow svg { display: block; min-width: 560px; width: 100%; height: auto; }
+.flow text { font-family: var(--body); fill: var(--fg); }
+.flow .sub { fill: var(--muted); font-size: 11px; }
+
+/* 트러블슈팅 */
+.timeline { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 6px; }
+.case { position: relative; padding: 0 0 36px 26px; display: grid; gap: 12px; }
+.case:last-child { padding-bottom: 0; }
+.case::before { content: ""; position: absolute; left: -8px; top: 6px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg); border: 3px solid var(--accent); }
+.case .code { font-family: var(--mono); font-size: .8rem; color: var(--accent); }
+.steps { display: grid; grid-template-columns: 4.2rem minmax(0, 1fr); gap: 6px 12px; font-size: .94rem; margin: 0; }
+.steps dt { font-family: var(--mono); font-size: .76rem; color: var(--muted); padding-top: 4px; }
+.steps dd { margin: 0; }
+.lesson { background: var(--ok-soft); color: var(--fg); border-radius: 10px; padding: 10px 14px; font-size: .94rem; }
+.lesson b { color: var(--ok); }
+.models { overflow-x: auto; }
+.models table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: .88rem; }
+.models th, .models td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.models th { font-family: var(--mono); font-size: .74rem; font-weight: 500; color: var(--muted); letter-spacing: .04em; }
+.models td:first-child { font-family: var(--mono); white-space: nowrap; }
+.pill { display: inline-block; font-family: var(--mono); font-size: .72rem; padding: 1px 8px; border-radius: 999px; background: var(--code-bg); color: var(--muted); white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+
+/* AI 협업 */
+.loop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; counter-reset: s; }
+.loop li { list-style: none; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); display: grid; gap: 6px; align-content: start; font-size: .9rem; }
+.loop li::before { counter-increment: s; content: "STEP " counter(s); font-family: var(--mono); font-size: .72rem; color: var(--accent); letter-spacing: .06em; }
+.loop li b { font-family: var(--display); font-size: 1rem; }
+.loop .who-tag { font-size: .78rem; color: var(--muted); }
+.loop { padding: 0; margin: 0; }
+.rules { background: var(--code-bg); border-radius: 12px; padding: 18px 20px; font-family: var(--mono); font-size: .85rem; line-height: 1.8; overflow-x: auto; white-space: pre-wrap; margin: 0; }
+
+/* 결과 */
+.limits { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; color: var(--muted); font-size: .94rem; }
+.stack { display: flex; flex-wrap: wrap; gap: 8px; }
+.stack span { font-family: var(--mono); font-size: .8rem; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; }
+footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); padding-top: 20px; }
+
+@media (max-width: 640px) {
+  .wrap { gap: 56px; padding-block: 36px 72px; }
+  .demo { grid-template-columns: 1fr; padding: 18px; }
+  .arrow i { transform: rotate(90deg); }
+  .role { grid-template-columns: 1fr; }
+  .loop { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps { grid-template-columns: 1fr; gap: 0; }
+  .steps dd { margin-bottom: 8px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .event { animation: pop .5s .3s ease-out both; }
+  @keyframes pop { from { transform: translateY(6px); } to { transform: none; } }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">AI 서비스 개발 · 팀 프로젝트 · 2026.09</div>
+    <h1>꾹<span>.</span></h1>
+    <p class="tagline">단톡방에서 오간 대화를 공유하면 바로 일정이 되는 캘린더</p>
+    <p class="lead">LLM을 실제 서비스에 붙이면서 생긴 문제들을 직접 디버깅하고 해결한 기록입니다. 기능 소개보다 <b>무엇이 왜 깨졌고 어떻게 고쳤는지</b>에 집중했습니다.</p>
+
+    <div class="demo" aria-label="입력 문장이 일정으로 변환되는 예시">
+      <div class="chat">
+        <span class="who">친구 단톡방</span>
+        <div class="msg"><span class="name">민지</span><span class="bubble other"><mark>담주 금욜</mark> 저녁에 다들 시간 돼?</span></div>
+        <div class="msg me"><span class="bubble">나 7시 이후 가능</span></div>
+        <div class="msg"><span class="name">민지</span><span class="bubble other">그럼 <mark>7시</mark> <mark>홍대 고기집</mark> ㄱㄱ</span></div>
+        <div class="msg me"><span class="bubble">콜</span></div>
+      </div>
+      <div class="arrow"><i>→</i>공유하기<br>→ 꾹</div>
+      <div class="event">
+        <span class="t">홍대 고기집 약속</span>
+        <dl>
+          <dt>날짜</dt><dd>10월 30일 (금)</dd>
+          <dt>시간</dt><dd>오후 7:00</dd>
+          <dt>장소</dt><dd>홍대 고기집</dd>
+          <dt>분류</dt><dd>개인</dd>
+        </dl>
+      </div>
+    </div>
+    <p class="demo-note">여러 메시지에 흩어진 날짜·시간·장소를 모아 일정 하나로 만듭니다 · 기준일 2026년 10월 22일(목) · 실제 서비스 응답 그대로</p>
+    <ul class="examples" aria-label="더 많은 입력 예시">
+      <li><span class="in">다음주 수요일 오후 3시 치과 예약했어</span><span class="to">→</span><span class="out">10/28(수) 15:00 · 치과 · 건강</span></li>
+      <li><span class="in">내일 점심 12시 반 팀 회의, 3층 회의실이에요</span><span class="to">→</span><span class="out">10/23(금) 12:30 · 3층 회의실 · 업무</span></li>
+      <li><span class="in">[공지] 이번주 목요일 19:30 동아리 정기모임 / 장소: 학생회관 2층</span><span class="to">→</span><span class="out">10/22(목) 19:30 · 학생회관 2층</span></li>
+    </ul>
+
+    <div class="meta">
+      <span><b>기간</b> 2026.09.16 – 09.20 (집중 개발 5일)</span>
+      <span><b>팀</b> 3명</span>
+      <span><b>내 역할</b> AI 해석 · 공유하기/PWA · 배포</span>
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="https://gguck-flame.vercel.app" target="_blank" rel="noopener">서비스 열기 ↗</a>
+      <a class="btn" href="https://github.com/sunho-dev/gguck-ai-calendar" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="btn" href="https://github.com/sunho-dev/gguck-ai-calendar/blob/main/DEVLOG.md" target="_blank" rel="noopener">개발 기록(DEVLOG) ↗</a>
+    </div>
+    <div class="shot">[ 데모 GIF 자리 ]<br>카톡 공유하기 → 꾹 자동 실행 → 일정 등록까지 한 번에 보이는 10초 영상</div>
+  </header>
+
+  <section id="role">
+    <div class="eyebrow">My Role</div>
+    <h2>내가 맡은 부분</h2>
+    <p>3명이 함께 만든 프로젝트입니다. 제가 직접 설계하고 구현한 부분과 팀원 작업을 구분했습니다.</p>
+    <div class="role">
+      <div class="role-col mine">
+        <h3>직접 담당</h3>
+        <ul>
+          <li>AI 해석 API 설계와 구현 (Claude로 프로토타입 → Gemini로 전환)</li>
+          <li>프롬프트 설계, 구조화 출력, 할루시네이션 방지 규칙</li>
+          <li>개인 장소 사전 (별명 + 카테고리 학습)</li>
+          <li>등록/취소 의도를 먼저 판단하는 해석 흐름</li>
+          <li>안드로이드 공유 시트(Web Share Target)로 바로 등록</li>
+          <li>해석 결과를 실제 일정으로 등록, 시간 없이 등록, "취소·삭제·제거" 명령</li>
+          <li>구글 캘린더 추가 링크, 알림을 .ics에 실어 보내기</li>
+          <li>Vercel 서버리스 배포 장애 디버깅</li>
+        </ul>
+      </div>
+      <div class="role-col team">
+        <h3>팀원 담당</h3>
+        <ul>
+          <li>캘린더 화면, 앱 기본 구조, 디자인</li>
+          <li>규칙 기반 로컬 파서와 일정 규칙 엔진</li>
+          <li>근무표 가져오기 (엑셀·사진 OCR)</li>
+          <li>구글 캘린더 연동, Redis 요청 조율</li>
+        </ul>
+      </div>
+    </div>
+    <div class="stats">
+      <span><b>49</b>/ 126 커밋</span>
+      <span><b>21</b>/ 26 AI 해석 서버 코드 커밋</span>
+      <span><b>70</b>개 로컬 테스트</span>
+    </div>
+  </section>
+
+  <section id="design">
+    <div class="eyebrow">Design Decisions</div>
+    <h2>설계 결정 세 가지</h2>
+    <div class="flow" aria-label="입력 문장 처리 흐름도">
+      <svg viewBox="0 0 640 150" role="img">
+        <title>입력 문장이 로컬 파서, 의도 판단, Gemini 해석, 서버 검증을 거쳐 일정이 되는 흐름</title>
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker>
+        </defs>
+        <g stroke="var(--line)" stroke-width="1.5">
+          <rect x="4" y="45" width="96" height="56" rx="10" fill="var(--surface)"/>
+          <rect x="140" y="45" width="112" height="56" rx="10" fill="var(--surface)"/>
+          <rect x="292" y="45" width="112" height="56" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <rect x="444" y="45" width="96" height="56" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <rect x="566" y="45" width="70" height="56" rx="10" fill="var(--ok-soft)" stroke="var(--ok)"/>
+        </g>
+        <g stroke="var(--muted)" stroke-width="1.5" fill="none" marker-end="url(#ah)">
+          <path d="M100 73H136"/><path d="M252 73H288"/><path d="M404 73H440"/><path d="M540 73H562"/>
+          <path d="M196 101V128H600V105"/>
+        </g>
+        <g font-size="13" text-anchor="middle">
+          <text x="52" y="78">입력 문장</text>
+          <text x="196" y="72">로컬 규칙 파서</text><text x="196" y="89" class="sub">정규식 · 무료 · 즉시</text>
+          <text x="348" y="72">의도 판단</text><text x="348" y="89" class="sub">등록 or 취소</text>
+          <text x="492" y="72">Gemini 해석</text><text x="492" y="89" class="sub">+ 서버 검증</text>
+          <text x="601" y="78">일정</text>
+          <text x="398" y="144" class="sub">해석 성공 시 AI 호출 없이 바로 등록</text>
+          <text x="370" y="36" class="sub">로컬 파서가 못 푼 문장만 AI로</text>
+        </g>
+      </svg>
+    </div>
+    <div class="decisions">
+      <div class="decision">
+        <span class="n">A</span>
+        <div>
+          <h3>모든 문장을 AI에 보내지 않는다</h3>
+          <p>팀원이 만든 규칙 파서가 먼저 해석하고, 실패한 문장만 Gemini로 넘깁니다. AI 호출 비용을 아끼고 응답이 빨라지며, API 키가 없어도 기본 기능은 동작합니다. 저는 AI 쪽 경로와 "등록인지 취소인지 먼저 판단하는" 단계를 붙였습니다. 해석 경로를 잘못 타서 엉뚱한 일정이 지워지는 일을 막기 위해서입니다.</p>
+        </div>
+      </div>
+      <div class="decision">
+        <span class="n">B</span>
+        <div>
+          <h3>모르는 말은 한 번 묻고 기억한다</h3>
+          <p>"종숲"처럼 친구끼리만 쓰는 줄임말은 인터넷 어디에도 없어서 AI가 알 수 없습니다. 그래서 처음 한 번만 뜻을 물어보고 <code>{별명, 이름, 주소, 카테고리}</code>로 저장합니다. 다음부터는 "종숲 ㄱ"만 써도 장소와 카테고리가 자동으로 붙습니다. 비슷한 패턴("잠숲")은 AI가 추측만 하고, 확정은 항상 사용자가 합니다.</p>
+        </div>
+      </div>
+      <div class="decision">
+        <span class="n">C</span>
+        <div>
+          <h3>AI 응답을 그대로 믿지 않는다</h3>
+          <p>JSON 스키마로 출력 형식을 강제해도 내용까지 맞는 건 아닙니다. 서버에서 응답을 한 번 더 검사해서, 개인 사전과 정확히 일치하는 별명이 있으면 AI 답보다 사전을 우선합니다.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="trouble">
+    <div class="eyebrow">Troubleshooting</div>
+    <h2>배포 하루 동안 연달아 터진 문제 네 가지</h2>
+    <p class="lead">Claude API로 만든 해석 기능을 무료로 운영하려고 Gemini로 옮긴 날(9월 17일) 생긴 일입니다. 하나를 고치면 다음 문제가 드러나는 식이었고, 무료 티어의 한계는 결국 개발 중 유료 등급으로 전환해 해결했습니다.</p>
+
+    <div class="timeline">
+      <article class="case">
+        <span class="code">CASE 1 · FUNCTION_INVOCATION_FAILED</span>
+        <h3>서버 함수가 요청을 보내기도 전에 죽음</h3>
+        <dl class="steps">
+          <dt>증상</dt><dd>AI 해석 요청이 전부 실패. 실행 시간이 몇 ms밖에 안 됨</dd>
+          <dt>단서</dt><dd>Vercel 로그의 외부 API 호출 목록이 비어 있음 → 네트워크 요청 자체를 못 보냄</dd>
+          <dt>원인</dt><dd>Gemini SDK는 Node 20 이상이 필요한데 버전 지정이 없어 구버전 런타임에서 실행됨</dd>
+          <dt>해결</dt><dd><code>engines.node: "&gt;=20"</code> 명시. 방어용으로 바꿨던 import 경로가 오히려 더 크게 깨뜨린 것도 발견해 되돌림</dd>
+        </dl>
+        <p class="lesson"><b>배운 점</b> 실제 배포 환경에서 확인하기 전에는 "안전하게" 넣은 수정도 위험할 수 있다.</p>
+      </article>
+
+      <article class="case">
+        <span class="code">CASE 2 · 404 NOT FOUND</span>
+        <h3>쓰던 모델이 사라짐</h3>
+        <dl class="steps">
+          <dt>증상</dt><dd>크래시를 고치자 이번엔 Google API가 404를 반환</dd>
+          <dt>단서</dt><dd>에러 원문을 응답에 잠깐 노출해(<code>[DEBUG]</code>, 확인 후 제거) 정확한 메시지 확인</dd>
+          <dt>원인</dt><dd><code>gemini-2.5-flash</code>가 신규 계정에 더 이상 제공되지 않음</dd>
+          <dt>해결</dt><dd>에러 메시지가 안내한 후속 모델로 교체</dd>
+        </dl>
+      </article>
+
+      <article class="case">
+        <span class="code">CASE 3 · 503 / 429 / 깨진 한글</span>
+        <h3>무료 티어에서 쓸 만한 모델 고르기</h3>
+        <p>모델마다 다른 방식으로 실패해서, 운영 환경에서 직접 돌려 보며 비교했습니다.</p>
+        <div class="models">
+          <table>
+            <thead><tr><th>모델</th><th>문제</th><th>결과</th></tr></thead>
+            <tbody>
+              <tr><td>gemini-3.8-flash</td><td>최신 모델이라 요청이 몰려 절반 가까이 503(과부하)</td><td><span class="pill">탈락</span></td></tr>
+              <tr><td>gemini-3.5-flash</td><td>하루 20건 한도라 금방 429(한도 초과)</td><td><span class="pill">탈락</span></td></tr>
+              <tr><td>gemini-3.1-flash-lite</td><td>한도는 넉넉하지만 한글이 깨지고 없는 장소를 지어냄</td><td><span class="pill">탈락</span></td></tr>
+              <tr><td>gemini-3.6-flash</td><td>품질과 가용성의 균형이 가장 안정적</td><td><span class="pill ok">채택</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lesson"><b>결론</b> 모델을 바꿔도 무료 티어에서는 503·429를 완전히 없앨 수 없었습니다. 개발 중 Gemini 유료 등급으로 전환해 해결했습니다.</p>
+      </article>
+
+      <article class="case">
+        <span class="code">CASE 4 · HALLUCINATION</span>
+        <h3>"모르면 비워 둬"가 통하지 않음</h3>
+        <dl class="steps">
+          <dt>증상</dt><dd>텍스트에 없는 "홍대"를 장소로 지어냄. 반대로 "종숲"은 장소인지조차 몰라서 "물어보기" 흐름이 아예 시작되지 않음</dd>
+          <dt>원인</dt><dd>"하지 마라"는 지시만으로는 모델이 어떤 단어가 장소 후보인지 판단할 기준이 없음</dd>
+          <dt>해결</dt><dd>구체적인 반례(few-shot)와 "날짜·시간·행동이 아닌 짧은 명사는 장소 후보로 본다"는 규칙을 프롬프트에 추가</dd>
+        </dl>
+        <p>이후로는 잘못 해석된 문장을 원인별로 나눠 반영했습니다. 처음 보는 줄임말은 사용자 확인을 거쳐 개인 사전에 저장하고, 반복되는 오해석("종숲·구로숲"을 장소로 못 봄, "병원에서 업무 미팅"을 건강으로 분류)은 프롬프트 규칙으로 추가했습니다. 실제로 틀렸던 사례가 그대로 규칙이 된 셈입니다.</p>
+        <p class="lesson"><b>배운 점</b> 약한 모델일수록 금지 지시보다 "이럴 땐 이렇게"라는 예시가 잘 통한다.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="ai">
+    <div class="eyebrow">How I Built It With AI</div>
+    <h2>QA 자동화 엔지니어가 AI와 함께 만든 방식</h2>
+    <p>저는 QA 자동화 엔지니어로 일하며 Python 자동화 코드는 써 봤지만, 웹 서비스를 직접 만들어 배포한 건 이번이 처음입니다. 그래서 Claude Code에 코드를 맡기기만 하지 않고, <b>기획은 제가 정하고 기술 선택과 구현은 AI와 함께 결정하되, 제가 이해한 만큼만 진행하는</b> 방식으로 작업했습니다.</p>
+    <ol class="loop">
+      <li><b>기획</b><span>만들 기능과 사용자 경험을 먼저 정함</span><span class="who-tag">내가 결정</span></li>
+      <li><b>기술 결정</b><span>기획에 맞는 구현 방법과 기술을 AI에게 선택지로 받고 장단점을 비교해 고름</span><span class="who-tag">AI가 제안, 내가 선택</span></li>
+      <li><b>구현</b><span>정한 방향대로 AI가 코드를 작성</span><span class="who-tag">AI가 구현</span></li>
+      <li><b>이해와 검증</b><span>동작 원리를 설명받고 배포 환경에서 직접 확인</span><span class="who-tag">함께</span></li>
+    </ol>
+    <p>이 방식을 매번 말로 요청하지 않도록, AI가 따를 <b>학습 규칙</b>을 미리 적어 두었습니다.</p>
+    <pre class="rules">· 설계와 방향은 사용자가 먼저 결정하게 한다. 선택지와 장단점을 제시한다.
+· 코드를 한 번에 다 짜지 않는다. 단계별로 나누고 각 단계를 설명한다.
+· 단계가 끝날 때마다 사용자가 이해했는지 확인한 뒤 다음으로 넘어간다.
+· 커밋 메시지는 무엇을, 왜 바꿨는지 한국어로 쉽게 쓴다.</pre>
+    <p class="lead">그 결과 위 트러블슈팅 같은 문제를 만났을 때 AI가 고쳐 주기만 기다리지 않고, 로그를 보고 원인을 좁혀 가는 과정을 직접 주도할 수 있었습니다.</p>
+    <div class="shot tall">[ 작업 화면 캡처 자리 ]<br>Claude Code와 기술 선택지를 비교하던 대화, 또는 학습 규칙 파일 화면</div>
+  </section>
+
+  <section id="result">
+    <div class="eyebrow">Result</div>
+    <h2>결과와 한계</h2>
+    <p>집중 개발 5일 만에 배포했고, 지금도 <a href="https://gguck-flame.vercel.app" target="_blank" rel="noopener">gguck-flame.vercel.app</a>에서 실제로 쓸 수 있습니다. 일정 계산, 반복, 충돌 규칙 같은 핵심 로직은 AI 호출 없이 테스트 70개로 검증합니다.</p>
+    <div class="stack">
+      <span>Expo (React Native Web)</span><span>TypeScript</span><span>Gemini API</span><span>Claude API (프로토타입)</span><span>Vercel Serverless</span><span>PWA · Web Share Target</span><span>Claude Code</span>
+    </div>
+    <h3>알고 있는 한계</h3>
+    <ul class="limits">
+      <li>일정은 브라우저에만 저장되어 기기 간 동기화가 없습니다.</li>
+      <li>"내일 5시"처럼 오전·오후가 없는 시간을 새벽(05:00)으로 해석하는 결함이 있습니다(2026-10-22 운영 서버에서 재현). 시간을 "확신 낮음"으로 표시해 확인 화면에서 고칠 수 있습니다.</li>
+      <li>구글 연동은 단일 사용자 구조라, 공개 서비스로 키우려면 사용자별 인증이 필요합니다.</li>
+    </ul>
+  </section>
+
+  <footer>꾹 (gguck) · 2026 · 팀 프로젝트 중 AI 해석·공유하기·배포 담당</footer>
+</div>
+
+</body>
+</html>
