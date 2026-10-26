@@ -96,8 +96,6 @@ section { display: grid; gap: 22px; }
 .examples .to { color: var(--accent); font-family: var(--mono); }
 .examples .out { color: var(--muted); font-family: var(--mono); font-size: .8rem; }
 @media (max-width: 640px) { .examples li { grid-template-columns: 1fr; gap: 2px; } .examples .to { display: none; } }
-.shot { aspect-ratio: 16 / 9; max-width: 100%; border: 2px dashed var(--line); border-radius: 14px; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: .9rem; padding: 16px; background: var(--surface); }
-.shot.tall { aspect-ratio: 4 / 3; }
 
 /* 역할 */
 .role { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -215,7 +213,6 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
       <a class="btn" href="https://github.com/sunho-dev/gguck-ai-calendar" target="_blank" rel="noopener">GitHub ↗</a>
       <a class="btn" href="https://github.com/sunho-dev/gguck-ai-calendar/blob/main/DEVLOG.md" target="_blank" rel="noopener">개발 기록(DEVLOG) ↗</a>
     </div>
-    <div class="shot">[ 데모 GIF 자리 ]<br>카톡 공유하기 → 꾹 자동 실행 → 일정 등록까지 한 번에 보이는 10초 영상</div>
   </header>
 
   <section id="role">
@@ -386,7 +383,6 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
 · 단계가 끝날 때마다 사용자가 이해했는지 확인한 뒤 다음으로 넘어간다.
 · 커밋 메시지는 무엇을, 왜 바꿨는지 한국어로 쉽게 쓴다.</pre>
     <p class="lead">그 결과 위 트러블슈팅 같은 문제를 만났을 때 AI가 고쳐 주기만 기다리지 않고, 로그를 보고 원인을 좁혀 가는 과정을 직접 주도할 수 있었습니다.</p>
-    <div class="shot tall">[ 작업 화면 캡처 자리 ]<br>Claude Code와 기술 선택지를 비교하던 대화, 또는 학습 규칙 파일 화면</div>
   </section>
 
   <section id="result">
